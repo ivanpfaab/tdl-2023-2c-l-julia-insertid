@@ -16,3 +16,11 @@ using Pkg
 Pkg.activate("spotify-tdl")
 Pkg.instantiate()
 ```
+
+### Correr la notebook Pluto
+
+```julia
+using Pluto
+Pluto.run()
+```
+
