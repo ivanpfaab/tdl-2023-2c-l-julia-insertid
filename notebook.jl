@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.19.31
+# v0.19.32
 
 using Markdown
 using InteractiveUtils
@@ -19,6 +19,9 @@ using HTTP
 # ╔═╡ b3e00154-dc43-4b5a-9eaf-3cb15c67ac45
 using JSON
 
+# ╔═╡ 2f7057c1-174c-4b10-9d88-c25679d8e9b6
+using Base64
+
 # ╔═╡ 61952dda-7ec1-4191-912d-3c1c94868add
 using DataFrames
 
@@ -31,6 +34,10 @@ Markdown.parse("""
 """
 )
 
+# ╔═╡ 3c6c8cfd-0029-4da7-abf7-01d686b3bc00
+# ╠═╡ show_logs = false
+run(`python3 authenticate.py`)
+
 # ╔═╡ 3a94f749-6894-4c68-bbda-2a8e12aeecbd
 DotEnv.load()
 
@@ -40,52 +47,69 @@ client_id = ENV["TDL_SPOTIFY_CLIENT_ID"]
 # ╔═╡ 8f0a750d-becf-4649-ab86-6f2eb146a253
 client_secret = ENV["TDL_SPOTIFY_CLIENT_SECRET"]
 
-# ╔═╡ 45d5b140-b7e9-467e-a09e-077b92265735
-# ╠═╡ show_logs = false
-function get_api_token()
-	# Configura la URL de la API de Spotify para obtener un token de acceso
-	url = "https://accounts.spotify.com/api/token"
+# ╔═╡ 5c2f5c51-42e0-44bf-8738-8ba0ee87d271
+# ╠═╡ disabled = true
+#=╠═╡
+auth_code = nothing
+  ╠═╡ =#
+
+# ╔═╡ 2556d7a6-4034-4db2-963e-b634015085e9
+callback_uri = "http://localhost:8888/callback"
+
+# ╔═╡ adb3da2a-e2d2-41f5-8e54-e89c7db9dd86
+begin
+	function get_token_req_body_headers()
+		token_request_headers = Dict("Content-Type" => "application/x-www-form-urlencoded")
+		token_request_body = nothing
+
+		auth_code = nothing
+		try
+			auth_code = ENV["AUTH_CODE"]
+			token_request_body = "grant_type=authorization_code&code=$auth_code&redirect_uri=$callback_uri"
 	
-	# Configura el cuerpo de la solicitud POST
-	body = "grant_type=client_credentials&client_id=$client_id&client_secret=$client_secret"
+			client_credentials = string(client_id, ":", client_secret)
+			encoded_client_credentials = base64encode(client_credentials)
+			
+			token_request_headers["Authorization"] = "Basic $encoded_client_credentials"
+		catch e
+			token_request_body = "grant_type=client_credentials&client_id=$client_id&client_secret=$client_secret"
+		end
 	
-	# Configura los encabezados de la solicitud POST
-	headers = Dict("Content-Type" => "application/x-www-form-urlencoded")
-	
-	# Realiza la solicitud POST a la API de Spotify
-	response = HTTP.request("POST", url, headers, body)
-	
-	# Verifica el código de estado de la respuesta
-	if response.status == 200
-	    # Convierte la respuesta a un objeto JSON
-	    result = JSON.parse(String(response.body))
-		return result["access_token"]
-	else
-	    println("Error al obtener el token de acceso de la API de Spotify")
-		return nothing
+		return token_request_headers, token_request_body
+	end
+
+	function get_api_token(headers, body)
+		url = "https://accounts.spotify.com/api/token"
+		response = HTTP.request("POST", url, headers, body)
+		if response.status == 200
+		    result = JSON.parse(String(response.body))
+			return result["access_token"]
+		else
+		    println("Error al obtener el token de acceso de la API de Spotify")
+			return nothing
+		end
 	end
 end
 
-# ╔═╡ 2420d51b-cddd-4066-8dd6-7828c076683b
-token = get_api_token()
+# ╔═╡ e30200a8-bf3c-461f-9f54-38b8e11176f6
+begin
+	token_request_headers, token_request_body = get_token_req_body_headers()
+	token = get_api_token(token_request_headers, token_request_body)
+end
+
+# ╔═╡ 92fb20d6-b5f2-4085-931e-f319ea36c899
+DotEnv.load()
 
 # ╔═╡ 47e503b0-b291-4aaf-a174-11103a200354
 function get_track_info(track_id)
-	# Configura la URL de la API de Spotify para obtener información sobre una pista específica
 	track_url = "https://api.spotify.com/v1/tracks/$track_id"
-	
-	# Configura los encabezados de la solicitud GET con el token de acceso
 	tracks_headers = [
 	    "Authorization" => "Bearer $token",
 	    "Content-Type" => "application/json",
 	]
 	
-	# Realiza la solicitud GET a la API de Spotify
 	track_response = HTTP.get(track_url, tracks_headers)
-	
-	# Verifica el código de estado de la respuesta
 	if track_response.status == 200
-	    # Convierte la respuesta a un objeto JSON
 	    track_result = JSON.parse(String(track_response.body))
 	    return track_result
 	else
@@ -105,21 +129,14 @@ track_info = get_track_info(AUX_TRACK_ID)
 
 # ╔═╡ c7446543-7622-4140-9aae-ed37eceef159
 function get_track_audio_features(track_id)
-    # Configura la URL de la API de Spotify para obtener información sobre las características de audio de una pista específica
     audio_features_url = "https://api.spotify.com/v1/audio-features/$track_id"
-
-    # Configura los encabezados de la solicitud GET con el token de acceso
     audio_features_headers = Dict(
         "Authorization" => "Bearer $token",
         "Content-Type" => "application/json"
     )
-
-    # Realiza la solicitud GET a la API de Spotify
     audio_features_response = HTTP.get(audio_features_url, audio_features_headers)
-
-    # Verifica el código de estado de la respuesta
+	
     if audio_features_response.status == 200
-        # Convierte la respuesta a un objeto JSON
         audio_features_result = JSON.parse(String(audio_features_response.body))
         return audio_features_result
     else
@@ -131,26 +148,37 @@ end
 # ╔═╡ f540ec75-abc5-4537-a90e-e6939229b364
 get_track_audio_features(AUX_TRACK_ID)
 
+# ╔═╡ 5a565a54-ab2c-41d9-931e-1ea835df3b65
+function get_favorite_tracks()
+	favorites_url = "https://api.spotify.com/v1/me/top/tracks"
+	favorites_headers = Dict("Authorization" => "Bearer $token")
+	favorites_response = HTTP.get(favorites_url, favorites_headers)
+
+    if favorites_response.status == 200
+        favorites = JSON.parse(String(favorites_response.body))
+        return favorites
+    else
+        println("Error al obtener los datos de tus canciones favoritas de la API de Spotify")
+        return nothing
+    end
+end
+
+# ╔═╡ b6ce57b4-06ec-4c66-91fb-d6f22ff6ff68
+favorite_tracks = get_favorite_tracks()
+
 # ╔═╡ d67f578e-4ead-42e8-97c5-9c61a0b0fc2f
 function get_audio_features_multiple_tracks(ids)
     # Codifica los IDs de las pistas para que sean compatibles con la URL
     encoded_ids = join(map(x -> replace(x, "/" => "%2F", "+" => "%2B", " " => "%20"), ids), ",")
 
-    # Configura la URL de la API de Spotify para obtener información sobre las características de audio de varias pistas
     audio_features_url = "https://api.spotify.com/v1/audio-features?ids=$encoded_ids"
-
-    # Configura los encabezados de la solicitud GET con el token de acceso
     audio_features_headers = Dict(
         "Authorization" => "Bearer $token",
         "Content-Type" => "application/json"
     )
 
-    # Realiza la solicitud GET a la API de Spotify
     audio_features_response = HTTP.get(audio_features_url, audio_features_headers)
-
-    # Verifica el código de estado de la respuesta
     if audio_features_response.status == 200
-        # Convierte la respuesta a un objeto JSON
         audio_features_result = JSON.parse(String(audio_features_response.body))
         return audio_features_result
     else
@@ -174,9 +202,16 @@ end
 # ╔═╡ c98cf96e-8555-4ec0-9f23-70dc13470acc
 df_tracks = tracks_features_to_df(tracks_features_dict["audio_features"])
 
+# ╔═╡ 608a4f93-278c-47a7-b45e-97b46c3fc295
+names(df_tracks)
+
+# ╔═╡ 37f86c36-6b32-475f-b191-dd17ac334669
+select!(df_tracks, Not(["analysis_url", "track_href", "type", "id"]))
+
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
 [deps]
+Base64 = "2a0f44e3-6c83-55bd-87e4-b1978d98bd5f"
 DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
 DotEnv = "4dc1fcf4-5e3b-5448-94ab-0c38ec0385c1"
 HTTP = "cd3eb016-35fb-5094-929b-558a96fad6f3"
@@ -187,9 +222,9 @@ Pluto = "c3e4b0f8-55cb-11ea-2926-15256bba5781"
 [compat]
 DataFrames = "~1.6.1"
 DotEnv = "~0.3.1"
-HTTP = "~0.9.17"
+HTTP = "~1.10.0"
 JSON = "~0.21.4"
-Pluto = "~0.19.9"
+Pluto = "~0.19.32"
 """
 
 # ╔═╡ 00000000-0000-0000-0000-000000000002
@@ -198,7 +233,7 @@ PLUTO_MANIFEST_TOML_CONTENTS = """
 
 julia_version = "1.9.3"
 manifest_format = "2.0"
-project_hash = "447fa109f828f3c655b13e0b0d5d12f7a3435c27"
+project_hash = "7c876ed26014014262a7654bff01a645a2d79ba5"
 
 [[deps.ArgTools]]
 uuid = "0dad84c5-d112-42e6-8d28-ef12dabb789f"
@@ -209,6 +244,17 @@ uuid = "56f22d72-fd6d-98f1-02f0-08ddc0907c33"
 
 [[deps.Base64]]
 uuid = "2a0f44e3-6c83-55bd-87e4-b1978d98bd5f"
+
+[[deps.BitFlags]]
+git-tree-sha1 = "43b1a4a8f797c1cddadf60499a8a077d4af2cd2d"
+uuid = "d1d4a3ce-64b1-5f1a-9ba4-7e7e69966f35"
+version = "0.1.7"
+
+[[deps.CodecZlib]]
+deps = ["TranscodingStreams", "Zlib_jll"]
+git-tree-sha1 = "cd67fc487743b2f0fd4380d4cbd3a24660d0eec8"
+uuid = "944b1d66-785c-5afd-91f1-9de20f533193"
+version = "0.7.3"
 
 [[deps.Compat]]
 deps = ["UUIDs"]
@@ -224,6 +270,12 @@ weakdeps = ["Dates", "LinearAlgebra"]
 deps = ["Artifacts", "Libdl"]
 uuid = "e66e0078-7015-5450-92f7-15fbd957f2ae"
 version = "1.0.5+0"
+
+[[deps.ConcurrentUtilities]]
+deps = ["Serialization", "Sockets"]
+git-tree-sha1 = "8cfa272e8bdedfa88b6aefbbca7c19f1befac519"
+uuid = "f0e56b4a-5159-44fe-b623-3e5288b988bb"
+version = "2.3.0"
 
 [[deps.Configurations]]
 deps = ["ExproniconLite", "OrderedCollections", "TOML"]
@@ -276,6 +328,12 @@ deps = ["ArgTools", "FileWatching", "LibCURL", "NetworkOptions"]
 uuid = "f43a241f-c20a-4ad4-852c-f6b1247861c6"
 version = "1.6.0"
 
+[[deps.ExceptionUnwrapping]]
+deps = ["Test"]
+git-tree-sha1 = "e90caa41f5a86296e014e148ee061bd6c3edec96"
+uuid = "460bff9d-24e4-43bc-9d9f-a8973cb893f4"
+version = "0.1.9"
+
 [[deps.ExproniconLite]]
 git-tree-sha1 = "637309d52dd9034af79c9df9b5f07a824e30ca2f"
 uuid = "55351af7-c7e9-48d6-89ff-24e801d99491"
@@ -295,21 +353,16 @@ uuid = "fb4132e2-a121-4a70-b8a1-d5b831dcdcc2"
 version = "0.5.3"
 
 [[deps.HTTP]]
-deps = ["Base64", "Dates", "IniFile", "Logging", "MbedTLS", "NetworkOptions", "Sockets", "URIs"]
-git-tree-sha1 = "0fa77022fe4b511826b39c894c90daf5fce3334a"
+deps = ["Base64", "CodecZlib", "ConcurrentUtilities", "Dates", "ExceptionUnwrapping", "Logging", "LoggingExtras", "MbedTLS", "NetworkOptions", "OpenSSL", "Random", "SimpleBufferStream", "Sockets", "URIs", "UUIDs"]
+git-tree-sha1 = "5eab648309e2e060198b45820af1a37182de3cce"
 uuid = "cd3eb016-35fb-5094-929b-558a96fad6f3"
-version = "0.9.17"
+version = "1.10.0"
 
 [[deps.HypertextLiteral]]
 deps = ["Tricks"]
-git-tree-sha1 = "c47c5fa4c5308f27ccaac35504858d8914e102f9"
+git-tree-sha1 = "7134810b1afce04bbc1045ca1985fbe81ce17653"
 uuid = "ac1192a8-f4b3-4bfe-ba22-af5b92cd3ab2"
-version = "0.9.4"
-
-[[deps.IniFile]]
-git-tree-sha1 = "f550e6e32074c939295eb5ea6de31849ac2c9625"
-uuid = "83e8ac13-25f8-5344-8a64-a9f2b223428f"
-version = "0.5.1"
+version = "0.9.5"
 
 [[deps.InlineStrings]]
 deps = ["Parsers"]
@@ -331,6 +384,12 @@ git-tree-sha1 = "a3f24677c21f5bbe9d2a714f95dcd58337fb2856"
 uuid = "82899510-4779-5014-852e-03e436cf321d"
 version = "1.0.0"
 
+[[deps.JLLWrappers]]
+deps = ["Artifacts", "Preferences"]
+git-tree-sha1 = "7e5d6779a1e09a36db2a7b6cff50942a0a7d0fca"
+uuid = "692b3bcd-3c85-4b1f-b108-f13ce0eb3210"
+version = "1.5.0"
+
 [[deps.JSON]]
 deps = ["Dates", "Mmap", "Parsers", "Unicode"]
 git-tree-sha1 = "31e996f0a15c7b280ba9f76636b3ff9e2ae58c9a"
@@ -338,9 +397,14 @@ uuid = "682c06a0-de6a-54ab-a142-c8b1cf79cde6"
 version = "0.21.4"
 
 [[deps.LaTeXStrings]]
-git-tree-sha1 = "f2355693d6778a178ade15952b7ac47a4ff97996"
+git-tree-sha1 = "50901ebc375ed41dbf8058da26f9de442febbbec"
 uuid = "b964fa9f-0449-5b57-a5c2-d3ea65f4040f"
-version = "1.3.0"
+version = "1.3.1"
+
+[[deps.LazilyInitializedFields]]
+git-tree-sha1 = "410fe4739a4b092f2ffe36fcb0dcc3ab12648ce1"
+uuid = "0e77f7df-68c5-4e49-93ce-4cd80f5598bf"
+version = "1.2.1"
 
 [[deps.LibCURL]]
 deps = ["LibCURL_jll", "MozillaCACerts_jll"]
@@ -371,10 +435,22 @@ uuid = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 [[deps.Logging]]
 uuid = "56ddb016-857b-54e1-b83d-db4d58db5568"
 
+[[deps.LoggingExtras]]
+deps = ["Dates", "Logging"]
+git-tree-sha1 = "c1dd6d7978c12545b4179fb6153b9250c96b0075"
+uuid = "e6f89c97-d47a-5376-807f-9c37f3926c36"
+version = "1.0.3"
+
 [[deps.MIMEs]]
 git-tree-sha1 = "65f28ad4b594aebe22157d6fac869786a255b7eb"
 uuid = "6c6e2e6c-3030-632d-7369-2d6c69616d65"
 version = "0.1.4"
+
+[[deps.Malt]]
+deps = ["Distributed", "Logging", "RelocatableFolders", "Serialization", "Sockets"]
+git-tree-sha1 = "5333200b6a2c49c2de68310cede765ebafa255ea"
+uuid = "36869731-bdee-424d-aa32-cab38c994e3b"
+version = "1.1.0"
 
 [[deps.Markdown]]
 deps = ["Base64"]
@@ -419,6 +495,18 @@ deps = ["Artifacts", "CompilerSupportLibraries_jll", "Libdl"]
 uuid = "4536629a-c528-5b80-bd46-f80d51c5b363"
 version = "0.3.21+4"
 
+[[deps.OpenSSL]]
+deps = ["BitFlags", "Dates", "MozillaCACerts_jll", "OpenSSL_jll", "Sockets"]
+git-tree-sha1 = "51901a49222b09e3743c65b8847687ae5fc78eb2"
+uuid = "4d8831e6-92b7-49fb-bdf8-b643e874388c"
+version = "1.4.1"
+
+[[deps.OpenSSL_jll]]
+deps = ["Artifacts", "JLLWrappers", "Libdl"]
+git-tree-sha1 = "cc6e1927ac521b659af340e0ca45828a3ffc748f"
+uuid = "458c3c95-2e84-50aa-8efc-19380b2a3a95"
+version = "3.0.12+0"
+
 [[deps.OrderedCollections]]
 git-tree-sha1 = "2e73fe17cac3c62ad1aebe70d44c963c3cfdc3e3"
 uuid = "bac558e1-5e72-5ebc-8fee-abe8a469f55d"
@@ -436,10 +524,10 @@ uuid = "44cfe95a-1eb2-52ea-b672-e2afdf69b78f"
 version = "1.9.2"
 
 [[deps.Pluto]]
-deps = ["Base64", "Configurations", "Dates", "Distributed", "FileWatching", "FuzzyCompletions", "HTTP", "HypertextLiteral", "InteractiveUtils", "Logging", "MIMEs", "Markdown", "MsgPack", "Pkg", "PrecompileSignatures", "REPL", "RelocatableFolders", "Sockets", "TOML", "Tables", "URIs", "UUIDs"]
-git-tree-sha1 = "87b0f17b2a71eb4a20b61eed34975055fe5537dd"
+deps = ["Base64", "Configurations", "Dates", "Downloads", "FileWatching", "FuzzyCompletions", "HTTP", "HypertextLiteral", "InteractiveUtils", "Logging", "LoggingExtras", "MIMEs", "Malt", "Markdown", "MsgPack", "Pkg", "PrecompileSignatures", "PrecompileTools", "REPL", "RegistryInstances", "RelocatableFolders", "Scratch", "Sockets", "TOML", "Tables", "URIs", "UUIDs"]
+git-tree-sha1 = "0b61bd2572c7c797a0e0c78c40b8cee740996ebb"
 uuid = "c3e4b0f8-55cb-11ea-2926-15256bba5781"
-version = "0.19.9"
+version = "0.19.32"
 
 [[deps.PooledArrays]]
 deps = ["DataAPI", "Future"]
@@ -487,11 +575,17 @@ git-tree-sha1 = "45e428421666073eab6f2da5c9d310d99bb12f9b"
 uuid = "189a3867-3050-52da-a836-e630ba90ab69"
 version = "1.2.2"
 
+[[deps.RegistryInstances]]
+deps = ["LazilyInitializedFields", "Pkg", "TOML", "Tar"]
+git-tree-sha1 = "ffd19052caf598b8653b99404058fce14828be51"
+uuid = "2792f1a3-b283-48e8-9a74-f99dce5104f3"
+version = "0.1.0"
+
 [[deps.RelocatableFolders]]
 deps = ["SHA", "Scratch"]
-git-tree-sha1 = "22c5201127d7b243b9ee1de3b43c408879dff60f"
+git-tree-sha1 = "ffdaf70d81cf6ff22c2b6e733c900c3321cab864"
 uuid = "05181044-ff0b-4ac5-8273-598c1e38db00"
-version = "0.3.0"
+version = "1.0.1"
 
 [[deps.SHA]]
 uuid = "ea8e919c-243c-51af-8825-aaa63cd721ce"
@@ -499,9 +593,9 @@ version = "0.7.0"
 
 [[deps.Scratch]]
 deps = ["Dates"]
-git-tree-sha1 = "30449ee12237627992a99d5e30ae63e4d78cd24a"
+git-tree-sha1 = "3bac05bc7e74a75fd9cba4295cde4045d9fe2386"
 uuid = "6c6a2e73-6563-6170-7368-637461726353"
-version = "1.2.0"
+version = "1.2.1"
 
 [[deps.SentinelArrays]]
 deps = ["Dates", "Random"]
@@ -511,6 +605,11 @@ version = "1.4.0"
 
 [[deps.Serialization]]
 uuid = "9e88b42a-f829-5b0c-bbe9-9e923198166b"
+
+[[deps.SimpleBufferStream]]
+git-tree-sha1 = "874e8867b33a00e784c8a7e4b60afe9e037b74e1"
+uuid = "777ac1f9-54b0-4bf8-805c-2214025038e7"
+version = "1.1.0"
 
 [[deps.Sockets]]
 uuid = "6462fe0b-24de-5631-8697-dd941f90decc"
@@ -563,6 +662,19 @@ deps = ["ArgTools", "SHA"]
 uuid = "a4e569a6-e804-4fa4-b0f3-eef7a1d5b13e"
 version = "1.10.0"
 
+[[deps.Test]]
+deps = ["InteractiveUtils", "Logging", "Random", "Serialization"]
+uuid = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[[deps.TranscodingStreams]]
+git-tree-sha1 = "1fbeaaca45801b4ba17c251dd8603ef24801dd84"
+uuid = "3bb67fe8-82b1-5028-8e26-92a6c54297fa"
+version = "0.10.2"
+weakdeps = ["Random", "Test"]
+
+    [deps.TranscodingStreams.extensions]
+    TestExt = ["Test", "Random"]
+
 [[deps.Tricks]]
 git-tree-sha1 = "eae1bb484cd63b36999ee58be2de6c178105112f"
 uuid = "410a4b4d-49e4-4fbc-ab6d-cb71b17b3775"
@@ -607,23 +719,32 @@ version = "17.4.0+0"
 # ╠═d91126af-6ad3-4b11-b6de-65eaf9b6d9cd
 # ╟─11b398d9-4453-4e4c-9c26-c4dafddad171
 # ╠═7076fff5-057d-4b5a-b0bd-d421efcc173a
+# ╠═3c6c8cfd-0029-4da7-abf7-01d686b3bc00
 # ╠═3a94f749-6894-4c68-bbda-2a8e12aeecbd
 # ╠═af731e20-65e7-45b9-b096-a6bdab35b2fa
 # ╠═8f0a750d-becf-4649-ab86-6f2eb146a253
+# ╠═5c2f5c51-42e0-44bf-8738-8ba0ee87d271
 # ╠═17645da3-8bee-4aef-bd2d-8867e3107707
 # ╠═b3e00154-dc43-4b5a-9eaf-3cb15c67ac45
-# ╟─45d5b140-b7e9-467e-a09e-077b92265735
-# ╠═2420d51b-cddd-4066-8dd6-7828c076683b
-# ╟─47e503b0-b291-4aaf-a174-11103a200354
+# ╠═2556d7a6-4034-4db2-963e-b634015085e9
+# ╠═2f7057c1-174c-4b10-9d88-c25679d8e9b6
+# ╠═adb3da2a-e2d2-41f5-8e54-e89c7db9dd86
+# ╠═e30200a8-bf3c-461f-9f54-38b8e11176f6
+# ╠═92fb20d6-b5f2-4085-931e-f319ea36c899
+# ╠═47e503b0-b291-4aaf-a174-11103a200354
 # ╠═90b73111-28dd-4ece-a788-d6844c578524
 # ╠═bade93ab-3ddc-4098-930f-4bf36e5e6f44
 # ╠═02660102-6a75-4076-860a-261a13348ca3
 # ╠═c7446543-7622-4140-9aae-ed37eceef159
 # ╠═f540ec75-abc5-4537-a90e-e6939229b364
+# ╠═5a565a54-ab2c-41d9-931e-1ea835df3b65
+# ╠═b6ce57b4-06ec-4c66-91fb-d6f22ff6ff68
 # ╠═d67f578e-4ead-42e8-97c5-9c61a0b0fc2f
 # ╠═ac3fcb59-990a-4128-ba5a-760b89fb3742
 # ╠═61952dda-7ec1-4191-912d-3c1c94868add
 # ╠═33138cfb-bae4-4dfd-a010-860b42d0dcbe
 # ╠═c98cf96e-8555-4ec0-9f23-70dc13470acc
+# ╠═608a4f93-278c-47a7-b45e-97b46c3fc295
+# ╠═37f86c36-6b32-475f-b191-dd17ac334669
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002
