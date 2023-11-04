@@ -118,14 +118,8 @@ function get_track_info(track_id)
 	end
 end
 
-# ╔═╡ 90b73111-28dd-4ece-a788-d6844c578524
-AUX_TRACK_ID = "0eGsygTp906u18L0Oimnem"
-
-# ╔═╡ bade93ab-3ddc-4098-930f-4bf36e5e6f44
-AUX_TRACK_ID_LIST = ["7ouMYWpwJ422jRcDASZB7P","4VqPOruhp5EdPBeR92t6lQ","2takcwOaAZWiXQijPHIx7B"]
-
 # ╔═╡ 02660102-6a75-4076-860a-261a13348ca3
-track_info = get_track_info(AUX_TRACK_ID)
+# track_info = get_track_info(UN ID)
 
 # ╔═╡ c7446543-7622-4140-9aae-ed37eceef159
 function get_track_audio_features(track_id)
@@ -146,7 +140,7 @@ function get_track_audio_features(track_id)
 end
 
 # ╔═╡ f540ec75-abc5-4537-a90e-e6939229b364
-get_track_audio_features(AUX_TRACK_ID)
+# get_track_audio_features(UN ID)
 
 # ╔═╡ 5a565a54-ab2c-41d9-931e-1ea835df3b65
 function get_favorite_tracks()
@@ -163,8 +157,14 @@ function get_favorite_tracks()
     end
 end
 
-# ╔═╡ b6ce57b4-06ec-4c66-91fb-d6f22ff6ff68
-favorite_tracks = get_favorite_tracks()
+# ╔═╡ e82495d6-7070-4b79-9a9d-301f1fbebd4b
+begin
+	favorite_tracks = get_favorite_tracks()
+	favorite_tracks_ids = []
+	for item in favorite_tracks["items"]
+		push!(favorite_tracks_ids, item["id"])
+	end
+end
 
 # ╔═╡ d67f578e-4ead-42e8-97c5-9c61a0b0fc2f
 function get_audio_features_multiple_tracks(ids)
@@ -188,7 +188,7 @@ function get_audio_features_multiple_tracks(ids)
 end
 
 # ╔═╡ ac3fcb59-990a-4128-ba5a-760b89fb3742
-tracks_features_dict = get_audio_features_multiple_tracks(AUX_TRACK_ID_LIST)
+tracks_features_dict = get_audio_features_multiple_tracks(favorite_tracks_ids)
 
 # ╔═╡ 33138cfb-bae4-4dfd-a010-860b42d0dcbe
 function tracks_features_to_df(dict_array)
@@ -732,13 +732,11 @@ version = "17.4.0+0"
 # ╠═e30200a8-bf3c-461f-9f54-38b8e11176f6
 # ╠═92fb20d6-b5f2-4085-931e-f319ea36c899
 # ╠═47e503b0-b291-4aaf-a174-11103a200354
-# ╠═90b73111-28dd-4ece-a788-d6844c578524
-# ╠═bade93ab-3ddc-4098-930f-4bf36e5e6f44
 # ╠═02660102-6a75-4076-860a-261a13348ca3
 # ╠═c7446543-7622-4140-9aae-ed37eceef159
 # ╠═f540ec75-abc5-4537-a90e-e6939229b364
 # ╠═5a565a54-ab2c-41d9-931e-1ea835df3b65
-# ╠═b6ce57b4-06ec-4c66-91fb-d6f22ff6ff68
+# ╠═e82495d6-7070-4b79-9a9d-301f1fbebd4b
 # ╠═d67f578e-4ead-42e8-97c5-9c61a0b0fc2f
 # ╠═ac3fcb59-990a-4128-ba5a-760b89fb3742
 # ╠═61952dda-7ec1-4191-912d-3c1c94868add
