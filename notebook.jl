@@ -25,7 +25,11 @@ Markdown.parse("""
 """
 )
 
-# ╔═╡ 3a94f749-6894-4c68-bbda-2a8e12aeecbd
+# ╔═╡ cd5e65f7-2e3a-4b67-8ca9-5952501690db
+# ╠═╡ show_logs = false
+run(`python3 authenticate.py`)
+
+# ╔═╡ 48dc90d2-6565-411f-b310-b918c426d015
 DotEnv.load()
 
 # ╔═╡ af731e20-65e7-45b9-b096-a6bdab35b2fa
@@ -36,10 +40,6 @@ client_secret = ENV["TDL_SPOTIFY_CLIENT_SECRET"]
 
 # ╔═╡ 2556d7a6-4034-4db2-963e-b634015085e9
 callback_uri = "http://localhost:8888/callback"
-
-# ╔═╡ cd5e65f7-2e3a-4b67-8ca9-5952501690db
-# ╠═╡ show_logs = false
-run(`python3 authenticate.py`)
 
 # ╔═╡ adb3da2a-e2d2-41f5-8e54-e89c7db9dd86
 begin
@@ -133,10 +133,48 @@ begin
 	end
 end
 
+# ╔═╡ 803356ce-9ebc-44c2-b046-a99e1088d662
+function encode_ids(ids)
+	return join(map(x -> replace(x, "/" => "%2F", "+" => "%2B", " " => "%20"), ids), ",")
+end
+
+# ╔═╡ 66f01f4b-7c04-4e5f-adcb-c5514fa0ef05
+function get_recommendations(ids)
+	return api_http_get_request("recommendations?seed_tracks=$(encode_ids(ids))&limit=100")["tracks"]
+end
+
+# ╔═╡ 80212680-af5f-464d-9f28-8e3c526cfce1
+begin
+	recommended_tracks = []
+    for i in 1:5:length(favorite_tracks_ids)
+        end_idx = min(i+5-1, length(favorite_tracks_ids))
+        batch_ids = favorite_tracks_ids[i:end_idx]
+		
+		for track in get_recommendations(batch_ids)
+        	push!(recommended_tracks, track["id"])
+		end
+    end
+end
+
+# ╔═╡ c5ec84dd-06ac-433f-8e55-72932891bcbe
+recommended_tracks
+
+# ╔═╡ ec787a8f-9821-49ba-bae3-3f37c958bb71
+unique_recommended_tracks = collect(Set(recommended_tracks))
+
+# ╔═╡ 5e883871-e5b4-41dd-bd0c-3b1299ff62df
+begin
+	len_recommended_tracks = length(recommended_tracks)
+	len_unique_recommended_tracks = length(unique_recommended_tracks)
+
+	n_filtered = len_recommended_tracks - len_unique_recommended_tracks
+	
+	println("Se filtraron $n_filtered de $len_recommended_tracks canciones. $len_unique_recommended_tracks canciones únicas")
+end
+
 # ╔═╡ d67f578e-4ead-42e8-97c5-9c61a0b0fc2f
 function get_audio_features_multiple_tracks(ids)
-    encoded_ids = join(map(x -> replace(x, "/" => "%2F", "+" => "%2B", " " => "%20"), ids), ",")
-	return api_http_get_request("audio-features?ids=$encoded_ids")
+	return api_http_get_request("audio-features?ids=$(encode_ids(ids))")
 end
 
 # ╔═╡ ac3fcb59-990a-4128-ba5a-760b89fb3742
@@ -159,6 +197,22 @@ names(df_tracks)
 
 # ╔═╡ 37f86c36-6b32-475f-b191-dd17ac334669
 select!(df_tracks, Not(["analysis_url", "track_href", "type", "id"]))
+
+# ╔═╡ 7aa537cb-455e-4469-873d-2a9e4cddc109
+begin
+	recommended_df = DataFrame()
+	
+	for i in 1:100:length(unique_recommended_tracks)
+	    end_idx = min(i + 100 - 1, length(unique_recommended_tracks))
+	    batch_tracks = unique_recommended_tracks[i:end_idx]
+		features = get_audio_features_multiple_tracks(batch_tracks)
+		new_df = tracks_features_to_df(features["audio_features"])
+		recommended_df = vcat(recommended_df, new_df)
+	end
+end
+
+# ╔═╡ 4395cc1e-b5e7-43e2-a439-0d8baa37dbbf
+select!(recommended_df, Not(["analysis_url", "track_href", "type", "id"]))
 
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
@@ -669,17 +723,17 @@ version = "17.4.0+0"
 # ╠═5adaa470-86b2-4745-a3c1-88510829685f
 # ╠═69c5f944-7778-11ee-1473-eff633c169cb
 # ╟─11b398d9-4453-4e4c-9c26-c4dafddad171
+# ╠═cd5e65f7-2e3a-4b67-8ca9-5952501690db
 # ╠═7076fff5-057d-4b5a-b0bd-d421efcc173a
-# ╠═3a94f749-6894-4c68-bbda-2a8e12aeecbd
+# ╠═48dc90d2-6565-411f-b310-b918c426d015
 # ╠═af731e20-65e7-45b9-b096-a6bdab35b2fa
 # ╠═8f0a750d-becf-4649-ab86-6f2eb146a253
 # ╠═2556d7a6-4034-4db2-963e-b634015085e9
-# ╠═cd5e65f7-2e3a-4b67-8ca9-5952501690db
 # ╠═17645da3-8bee-4aef-bd2d-8867e3107707
 # ╠═adb3da2a-e2d2-41f5-8e54-e89c7db9dd86
-# ╠═d665435f-7135-47b3-a9dc-8f6afc54dc35
-# ╠═2f5e201b-2e28-4084-a4e0-1634612a4bbd
-# ╠═b7cfc727-ae00-4b5e-a455-9e39bd3bdaa7
+# ╟─d665435f-7135-47b3-a9dc-8f6afc54dc35
+# ╟─2f5e201b-2e28-4084-a4e0-1634612a4bbd
+# ╟─b7cfc727-ae00-4b5e-a455-9e39bd3bdaa7
 # ╠═ba62cb8d-6e1f-417d-bd55-74c6bb35b81f
 # ╠═3d156acc-d820-41d8-ab04-615b07aa53c3
 # ╠═47e503b0-b291-4aaf-a174-11103a200354
@@ -688,6 +742,12 @@ version = "17.4.0+0"
 # ╠═f540ec75-abc5-4537-a90e-e6939229b364
 # ╠═5a565a54-ab2c-41d9-931e-1ea835df3b65
 # ╠═e82495d6-7070-4b79-9a9d-301f1fbebd4b
+# ╠═803356ce-9ebc-44c2-b046-a99e1088d662
+# ╠═66f01f4b-7c04-4e5f-adcb-c5514fa0ef05
+# ╠═80212680-af5f-464d-9f28-8e3c526cfce1
+# ╠═c5ec84dd-06ac-433f-8e55-72932891bcbe
+# ╠═ec787a8f-9821-49ba-bae3-3f37c958bb71
+# ╠═5e883871-e5b4-41dd-bd0c-3b1299ff62df
 # ╠═d67f578e-4ead-42e8-97c5-9c61a0b0fc2f
 # ╠═ac3fcb59-990a-4128-ba5a-760b89fb3742
 # ╠═61952dda-7ec1-4191-912d-3c1c94868add
@@ -695,5 +755,7 @@ version = "17.4.0+0"
 # ╠═c98cf96e-8555-4ec0-9f23-70dc13470acc
 # ╠═608a4f93-278c-47a7-b45e-97b46c3fc295
 # ╠═37f86c36-6b32-475f-b191-dd17ac334669
+# ╠═7aa537cb-455e-4469-873d-2a9e4cddc109
+# ╠═4395cc1e-b5e7-43e2-a439-0d8baa37dbbf
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002
