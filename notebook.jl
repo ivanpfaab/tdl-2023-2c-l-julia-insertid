@@ -5,22 +5,13 @@ using Markdown
 using InteractiveUtils
 
 # ╔═╡ 5adaa470-86b2-4745-a3c1-88510829685f
-using Pluto
-
-# ╔═╡ d91126af-6ad3-4b11-b6de-65eaf9b6d9cd
-using Markdown
+using Pluto, Markdown
 
 # ╔═╡ 7076fff5-057d-4b5a-b0bd-d421efcc173a
 using DotEnv
 
 # ╔═╡ 17645da3-8bee-4aef-bd2d-8867e3107707
-using HTTP
-
-# ╔═╡ b3e00154-dc43-4b5a-9eaf-3cb15c67ac45
-using JSON
-
-# ╔═╡ 2f7057c1-174c-4b10-9d88-c25679d8e9b6
-using Base64
+using HTTP, JSON, Base64
 
 # ╔═╡ 61952dda-7ec1-4191-912d-3c1c94868add
 using DataFrames
@@ -34,10 +25,6 @@ Markdown.parse("""
 """
 )
 
-# ╔═╡ 3c6c8cfd-0029-4da7-abf7-01d686b3bc00
-# ╠═╡ show_logs = false
-run(`python3 authenticate.py`)
-
 # ╔═╡ 3a94f749-6894-4c68-bbda-2a8e12aeecbd
 DotEnv.load()
 
@@ -47,14 +34,12 @@ client_id = ENV["TDL_SPOTIFY_CLIENT_ID"]
 # ╔═╡ 8f0a750d-becf-4649-ab86-6f2eb146a253
 client_secret = ENV["TDL_SPOTIFY_CLIENT_SECRET"]
 
-# ╔═╡ 5c2f5c51-42e0-44bf-8738-8ba0ee87d271
-# ╠═╡ disabled = true
-#=╠═╡
-auth_code = nothing
-  ╠═╡ =#
-
 # ╔═╡ 2556d7a6-4034-4db2-963e-b634015085e9
 callback_uri = "http://localhost:8888/callback"
+
+# ╔═╡ cd5e65f7-2e3a-4b67-8ca9-5952501690db
+# ╠═╡ show_logs = false
+run(`python3 authenticate.py`)
 
 # ╔═╡ adb3da2a-e2d2-41f5-8e54-e89c7db9dd86
 begin
@@ -91,31 +76,36 @@ begin
 	end
 end
 
-# ╔═╡ e30200a8-bf3c-461f-9f54-38b8e11176f6
-begin
-	token_request_headers, token_request_body = get_token_req_body_headers()
-	token = get_api_token(token_request_headers, token_request_body)
-end
+# ╔═╡ d665435f-7135-47b3-a9dc-8f6afc54dc35
+token_request_headers, token_request_body = get_token_req_body_headers()
 
-# ╔═╡ 92fb20d6-b5f2-4085-931e-f319ea36c899
-DotEnv.load()
+# ╔═╡ 2f5e201b-2e28-4084-a4e0-1634612a4bbd
+token = get_api_token(token_request_headers, token_request_body)
+
+# ╔═╡ b7cfc727-ae00-4b5e-a455-9e39bd3bdaa7
+COMMON_REQ_HEADERS = Dict(
+        "Authorization" => "Bearer $token",
+        "Content-Type" => "application/json"
+    )
+
+# ╔═╡ ba62cb8d-6e1f-417d-bd55-74c6bb35b81f
+SPOTIFY_API_URL = "https://api.spotify.com/v1/"
+
+# ╔═╡ 3d156acc-d820-41d8-ab04-615b07aa53c3
+function api_http_get_request(endpoint)
+	url = SPOTIFY_API_URL * endpoint
+	response = HTTP.get(url, COMMON_REQ_HEADERS)
+	if response.status == 200
+		return JSON.parse(String(response.body))
+	else
+	    println("Error al obtener los datos de $endpoint")
+		return nothing
+	end
+end
 
 # ╔═╡ 47e503b0-b291-4aaf-a174-11103a200354
 function get_track_info(track_id)
-	track_url = "https://api.spotify.com/v1/tracks/$track_id"
-	tracks_headers = [
-	    "Authorization" => "Bearer $token",
-	    "Content-Type" => "application/json",
-	]
-	
-	track_response = HTTP.get(track_url, tracks_headers)
-	if track_response.status == 200
-	    track_result = JSON.parse(String(track_response.body))
-	    return track_result
-	else
-	    println("Error al obtener los datos de la API de Spotify")
-		return nothing
-	end
+	return api_http_get_request("tracks/$track_id")
 end
 
 # ╔═╡ 02660102-6a75-4076-860a-261a13348ca3
@@ -123,20 +113,7 @@ end
 
 # ╔═╡ c7446543-7622-4140-9aae-ed37eceef159
 function get_track_audio_features(track_id)
-    audio_features_url = "https://api.spotify.com/v1/audio-features/$track_id"
-    audio_features_headers = Dict(
-        "Authorization" => "Bearer $token",
-        "Content-Type" => "application/json"
-    )
-    audio_features_response = HTTP.get(audio_features_url, audio_features_headers)
-	
-    if audio_features_response.status == 200
-        audio_features_result = JSON.parse(String(audio_features_response.body))
-        return audio_features_result
-    else
-        println("Error al obtener los datos de las características de audio de la API de Spotify")
-        return nothing
-    end
+    return api_http_get_request("audio-features/$track_id")
 end
 
 # ╔═╡ f540ec75-abc5-4537-a90e-e6939229b364
@@ -144,17 +121,7 @@ end
 
 # ╔═╡ 5a565a54-ab2c-41d9-931e-1ea835df3b65
 function get_favorite_tracks()
-	favorites_url = "https://api.spotify.com/v1/me/top/tracks"
-	favorites_headers = Dict("Authorization" => "Bearer $token")
-	favorites_response = HTTP.get(favorites_url, favorites_headers)
-
-    if favorites_response.status == 200
-        favorites = JSON.parse(String(favorites_response.body))
-        return favorites
-    else
-        println("Error al obtener los datos de tus canciones favoritas de la API de Spotify")
-        return nothing
-    end
+	return api_http_get_request("me/top/tracks?limit=50")
 end
 
 # ╔═╡ e82495d6-7070-4b79-9a9d-301f1fbebd4b
@@ -168,23 +135,8 @@ end
 
 # ╔═╡ d67f578e-4ead-42e8-97c5-9c61a0b0fc2f
 function get_audio_features_multiple_tracks(ids)
-    # Codifica los IDs de las pistas para que sean compatibles con la URL
     encoded_ids = join(map(x -> replace(x, "/" => "%2F", "+" => "%2B", " " => "%20"), ids), ",")
-
-    audio_features_url = "https://api.spotify.com/v1/audio-features?ids=$encoded_ids"
-    audio_features_headers = Dict(
-        "Authorization" => "Bearer $token",
-        "Content-Type" => "application/json"
-    )
-
-    audio_features_response = HTTP.get(audio_features_url, audio_features_headers)
-    if audio_features_response.status == 200
-        audio_features_result = JSON.parse(String(audio_features_response.body))
-        return audio_features_result
-    else
-        println("Error al obtener los datos de las características de audio de la API de Spotify")
-        return nothing
-    end
+	return api_http_get_request("audio-features?ids=$encoded_ids")
 end
 
 # ╔═╡ ac3fcb59-990a-4128-ba5a-760b89fb3742
@@ -716,21 +668,20 @@ version = "17.4.0+0"
 # ╔═╡ Cell order:
 # ╠═5adaa470-86b2-4745-a3c1-88510829685f
 # ╠═69c5f944-7778-11ee-1473-eff633c169cb
-# ╠═d91126af-6ad3-4b11-b6de-65eaf9b6d9cd
 # ╟─11b398d9-4453-4e4c-9c26-c4dafddad171
 # ╠═7076fff5-057d-4b5a-b0bd-d421efcc173a
-# ╠═3c6c8cfd-0029-4da7-abf7-01d686b3bc00
 # ╠═3a94f749-6894-4c68-bbda-2a8e12aeecbd
 # ╠═af731e20-65e7-45b9-b096-a6bdab35b2fa
 # ╠═8f0a750d-becf-4649-ab86-6f2eb146a253
-# ╠═5c2f5c51-42e0-44bf-8738-8ba0ee87d271
-# ╠═17645da3-8bee-4aef-bd2d-8867e3107707
-# ╠═b3e00154-dc43-4b5a-9eaf-3cb15c67ac45
 # ╠═2556d7a6-4034-4db2-963e-b634015085e9
-# ╠═2f7057c1-174c-4b10-9d88-c25679d8e9b6
+# ╠═cd5e65f7-2e3a-4b67-8ca9-5952501690db
+# ╠═17645da3-8bee-4aef-bd2d-8867e3107707
 # ╠═adb3da2a-e2d2-41f5-8e54-e89c7db9dd86
-# ╠═e30200a8-bf3c-461f-9f54-38b8e11176f6
-# ╠═92fb20d6-b5f2-4085-931e-f319ea36c899
+# ╠═d665435f-7135-47b3-a9dc-8f6afc54dc35
+# ╠═2f5e201b-2e28-4084-a4e0-1634612a4bbd
+# ╠═b7cfc727-ae00-4b5e-a455-9e39bd3bdaa7
+# ╠═ba62cb8d-6e1f-417d-bd55-74c6bb35b81f
+# ╠═3d156acc-d820-41d8-ab04-615b07aa53c3
 # ╠═47e503b0-b291-4aaf-a174-11103a200354
 # ╠═02660102-6a75-4076-860a-261a13348ca3
 # ╠═c7446543-7622-4140-9aae-ed37eceef159

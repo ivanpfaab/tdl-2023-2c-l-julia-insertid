@@ -93,5 +93,5 @@ def authenticate():
         auth_code_thread.join()
         server_thread.join()
 
-if os.getenv("AUTH_CODE") is None or os.getenv("AUTH_CODE") != "INVALID":
-    authenticate()
+
+authenticate()
