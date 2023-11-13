@@ -11,8 +11,7 @@ from spotipy.oauth2 import SpotifyOAuth
 
 load_dotenv()  # Loading .env file
 
-callback_uri = "http://localhost:8888/callback"
-
+callback_uri = os.getenv("TDL_CALLBACK_URI")
 client_id = os.getenv("TDL_SPOTIFY_CLIENT_ID")
 client_secret = os.getenv("TDL_SPOTIFY_CLIENT_SECRET")
 
@@ -35,7 +34,7 @@ def save_auth_code(code):
             else:
                 file.write(line)
 
-        file.write(f"\nAUTH_CODE=\"{code}\"\n")
+        file.write(f"AUTH_CODE={code}\n")
 
 def process_query_params(query_params):
     global auth_code
@@ -82,11 +81,7 @@ def authenticate():
         auth_code_thread = threading.Thread(target=wait_for_authorization_code_to_change)
         server_thread.start()
         auth_code_thread.start()
-        if sys.platform == "darwin":
-            webbrowser.open(auth_url)
-        elif sys.platform == "linux":
-            webbrowser.open(auth_url)
-        elif sys.platform == "win32":
+        if sys.platform in ["darwin", "linux", "win32"]:
             webbrowser.open(auth_url)
         else:
             print("No se pudo detectar el sistema operativo compatible.")
