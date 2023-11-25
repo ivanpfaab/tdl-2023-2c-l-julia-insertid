@@ -16,7 +16,7 @@ client_id = os.getenv("TDL_SPOTIFY_CLIENT_ID")
 client_secret = os.getenv("TDL_SPOTIFY_CLIENT_SECRET")
 
 def get_auth_url():
-    scopes = "user-read-recently-played user-top-read app-remote-control streaming user-library-read user-library-modify playlist-read-private playlist-read-collaborative playlist-modify-public playlist-modify-private user-read-email user-read-private user-follow-read user-follow-modify user-read-playback-state user-modify-playback-state user-read-currently-playing"
+    scopes = "user-read-recently-played user-top-read playlist-modify-public"
     sp_oauth = SpotifyOAuth(client_id, client_secret, callback_uri, scope=scopes, state="h1h2h3h4h5")
     return sp_oauth.get_authorize_url()
 
@@ -29,12 +29,12 @@ def save_auth_code(code):
 
     with open('.env', 'w') as file:
         for line in lines:
-            if line.startswith("AUTH_CODE"):
+            if line.startswith("AUTH_CODE") or line == "\n":
                 pass
             else:
                 file.write(line)
 
-        file.write(f"AUTH_CODE={code}\n")
+        file.write(f"\nAUTH_CODE=\"{code}\"\n")
 
 def process_query_params(query_params):
     global auth_code

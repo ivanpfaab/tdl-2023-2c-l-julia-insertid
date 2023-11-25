@@ -22,6 +22,12 @@ using Clustering, Plots, Distances, Statistics
 # ╔═╡ 735b89a1-f789-4864-a5b3-72cebc5223ad
 using StatsPlots
 
+# ╔═╡ 33d7bd35-22ab-4fd4-802a-658099588482
+using StatsBase
+
+# ╔═╡ 91b5bb39-c088-4678-9d92-b7120fd45c70
+using Random
+
 # ╔═╡ 69c5f944-7778-11ee-1473-eff633c169cb
 println("Hola TDL!")
 
@@ -242,7 +248,7 @@ xt=(1:3)
 begin
 	c = [:red, :blue, :green]
 	cluster_counts = combine(groupby(recommended_df, :cluster), nrow)
-	bar(cluster_counts.cluster, cluster_counts.nrow, xlabel="Cluster", ylabel="Número de elementos", label="Counts", legend=:top, color=c, xticks=xt)
+	bar(cluster_counts.cluster, cluster_counts.nrow, xlabel="Cluster", ylabel="Número de canciones", label="Counts", legend=:top, color=c, xticks=xt)
 end
 
 # ╔═╡ d92f7df8-cae8-4a2a-9015-0311326e24a5
@@ -276,6 +282,51 @@ begin
 	feature_subplots(features, recommended_df)
 end
 
+# ╔═╡ 24d4ec4d-5beb-49b6-b4d4-133b8e93be7f
+N_SONGS_PER_PLAYLIST = 25
+
+# ╔═╡ 823ed0a0-3229-4ce4-9984-15f7d37d390c
+function shuffle_clusters(recommended_df)
+	val_clusters = [1,2,3]
+	cluster_samples = Dict{Int, Vector{String}}()
+	
+	for val in val_clusters
+	    samples = filter(row -> row.cluster == val, recommended_df)
+	    selected_rows = shuffle(1:nrow(samples))[1:N_SONGS_PER_PLAYLIST]
+	    cluster_samples[val] = samples[selected_rows, :].uri
+	end
+
+	return cluster_samples
+end
+
+# ╔═╡ 2043ef7d-593d-4434-81b3-5dc1c60bc489
+cluster_samples = shuffle_clusters(recommended_df)
+
+# ╔═╡ 5006ea0a-c26c-4e9c-a422-cdb54e6415d9
+function create_playlist(name, uris)
+	url = "https://api.spotify.com/v1/me/playlists"
+
+	 playlist_data = Dict(
+        "name" => name,
+        "description" => "Creada usando Julia!"
+    )
+	
+	response = HTTP.request("POST", url, COMMON_REQ_HEADERS, json(playlist_data))
+	if response.status == 201
+		playlist_id = JSON.parse(String(response.body))["id"]
+		add_tracks_url = "https://api.spotify.com/v1/playlists/$playlist_id/tracks"
+		HTTP.request("POST", add_tracks_url, COMMON_REQ_HEADERS, json(Dict("uris" => uris)))
+	else
+		println("Error al crear playlist")
+	end
+end
+
+# ╔═╡ 2dd20f72-cc29-49cb-8ea4-c87b35a06b0c
+for (cluster, tracks) in cluster_samples
+    create_playlist("TDL - Playlist $cluster", tracks)
+    println("Playlist para el Cluster $cluster creada.")
+end
+
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
 [deps]
@@ -289,7 +340,9 @@ JSON = "682c06a0-de6a-54ab-a142-c8b1cf79cde6"
 Markdown = "d6f4376e-aef5-505a-96c1-9c027394607a"
 Plots = "91a5bcdd-55d7-5caf-9e0b-520d859cae80"
 Pluto = "c3e4b0f8-55cb-11ea-2926-15256bba5781"
+Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
+StatsBase = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
 StatsPlots = "f3b207a7-027a-5e70-b257-86293d7955fd"
 
 [compat]
@@ -301,6 +354,7 @@ HTTP = "~1.10.0"
 JSON = "~0.21.4"
 Plots = "~1.39.0"
 Pluto = "~0.19.32"
+StatsBase = "~0.34.2"
 StatsPlots = "~0.15.6"
 """
 
@@ -310,7 +364,7 @@ PLUTO_MANIFEST_TOML_CONTENTS = """
 
 julia_version = "1.9.3"
 manifest_format = "2.0"
-project_hash = "e6ed11247b99d639f17de3affa78372ff3803525"
+project_hash = "c519b8dbfc3db0ce7654152558fb24b4e89bf3d6"
 
 [[deps.AbstractFFTs]]
 deps = ["LinearAlgebra"]
@@ -1789,9 +1843,9 @@ version = "1.4.1+1"
 # ╟─11b398d9-4453-4e4c-9c26-c4dafddad171
 # ╠═cd5e65f7-2e3a-4b67-8ca9-5952501690db
 # ╠═7076fff5-057d-4b5a-b0bd-d421efcc173a
-# ╠═48dc90d2-6565-411f-b310-b918c426d015
-# ╠═af731e20-65e7-45b9-b096-a6bdab35b2fa
-# ╠═8f0a750d-becf-4649-ab86-6f2eb146a253
+# ╟─48dc90d2-6565-411f-b310-b918c426d015
+# ╟─af731e20-65e7-45b9-b096-a6bdab35b2fa
+# ╟─8f0a750d-becf-4649-ab86-6f2eb146a253
 # ╠═2556d7a6-4034-4db2-963e-b634015085e9
 # ╠═17645da3-8bee-4aef-bd2d-8867e3107707
 # ╠═adb3da2a-e2d2-41f5-8e54-e89c7db9dd86
@@ -1829,5 +1883,12 @@ version = "1.4.1+1"
 # ╠═735b89a1-f789-4864-a5b3-72cebc5223ad
 # ╠═d92f7df8-cae8-4a2a-9015-0311326e24a5
 # ╠═9f05197a-61e7-4c6a-878c-59cfaa277b66
+# ╠═33d7bd35-22ab-4fd4-802a-658099588482
+# ╠═91b5bb39-c088-4678-9d92-b7120fd45c70
+# ╠═24d4ec4d-5beb-49b6-b4d4-133b8e93be7f
+# ╠═823ed0a0-3229-4ce4-9984-15f7d37d390c
+# ╠═2043ef7d-593d-4434-81b3-5dc1c60bc489
+# ╠═5006ea0a-c26c-4e9c-a422-cdb54e6415d9
+# ╠═2dd20f72-cc29-49cb-8ea4-c87b35a06b0c
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002
