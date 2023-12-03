@@ -13,6 +13,9 @@ using DotEnv
 # ╔═╡ 17645da3-8bee-4aef-bd2d-8867e3107707
 using HTTP, JSON, Base64
 
+# ╔═╡ 723b1458-7e55-4822-83d6-b320e7d76e7b
+using Base.Threads
+
 # ╔═╡ 61952dda-7ec1-4191-912d-3c1c94868add
 using DataFrames
 
@@ -139,10 +142,7 @@ end
 # ╔═╡ e82495d6-7070-4b79-9a9d-301f1fbebd4b
 begin
 	favorite_tracks = get_favorite_tracks()
-	favorite_tracks_ids = []
-	for item in favorite_tracks["items"]
-		push!(favorite_tracks_ids, item["id"])
-	end
+	favorite_tracks_ids = [item["id"] for item in favorite_tracks["items"]]
 end
 
 # ╔═╡ 803356ce-9ebc-44c2-b046-a99e1088d662
@@ -157,15 +157,15 @@ end
 
 # ╔═╡ 80212680-af5f-464d-9f28-8e3c526cfce1
 begin
-	recommended_tracks = []
-    for i in 1:5:length(favorite_tracks_ids)
-        end_idx = min(i+5-1, length(favorite_tracks_ids))
-        batch_ids = favorite_tracks_ids[i:end_idx]
-		
-		for track in get_recommendations(batch_ids)
-        	push!(recommended_tracks, track["id"])
-		end
-    end
+	function process_batch(batch_ids)
+	    return [track["id"] for track in get_recommendations(batch_ids)]
+	end
+	
+	BATCH_SIZE = 5
+	batches = [favorite_tracks_ids[i:min(i+BATCH_SIZE-1, end)] for i in 1:BATCH_SIZE:length(favorite_tracks_ids)]
+	
+	recommended_tracks = [Threads.@spawn process_batch(batch) for batch in batches]
+	recommended_tracks = vcat(fetch.(recommended_tracks)...)
 end
 
 # ╔═╡ c5ec84dd-06ac-433f-8e55-72932891bcbe
@@ -1862,6 +1862,7 @@ version = "1.4.1+1"
 # ╠═e82495d6-7070-4b79-9a9d-301f1fbebd4b
 # ╠═803356ce-9ebc-44c2-b046-a99e1088d662
 # ╠═66f01f4b-7c04-4e5f-adcb-c5514fa0ef05
+# ╠═723b1458-7e55-4822-83d6-b320e7d76e7b
 # ╠═80212680-af5f-464d-9f28-8e3c526cfce1
 # ╠═c5ec84dd-06ac-433f-8e55-72932891bcbe
 # ╠═ec787a8f-9821-49ba-bae3-3f37c958bb71
