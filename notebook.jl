@@ -25,14 +25,8 @@ using Clustering, Plots, Distances, Statistics
 # ╔═╡ 735b89a1-f789-4864-a5b3-72cebc5223ad
 using StatsPlots
 
-# ╔═╡ 33d7bd35-22ab-4fd4-802a-658099588482
-using StatsBase
-
 # ╔═╡ 91b5bb39-c088-4678-9d92-b7120fd45c70
-using Random
-
-# ╔═╡ 69c5f944-7778-11ee-1473-eff633c169cb
-println("Hola TDL!")
+using Random, StatsBase
 
 # ╔═╡ 11b398d9-4453-4e4c-9c26-c4dafddad171
 Markdown.parse("""
@@ -123,16 +117,10 @@ function get_track_info(track_id)
 	return api_http_get_request("tracks/$track_id")
 end
 
-# ╔═╡ 02660102-6a75-4076-860a-261a13348ca3
-# track_info = get_track_info(UN ID)
-
 # ╔═╡ c7446543-7622-4140-9aae-ed37eceef159
 function get_track_audio_features(track_id)
     return api_http_get_request("audio-features/$track_id")
 end
-
-# ╔═╡ f540ec75-abc5-4537-a90e-e6939229b364
-# get_track_audio_features(UN ID)
 
 # ╔═╡ 5a565a54-ab2c-41d9-931e-1ea835df3b65
 function get_favorite_tracks()
@@ -228,27 +216,33 @@ select!(recommended_df, Not(["analysis_url", "track_href", "type", "id", "durati
 
 # ╔═╡ f792b205-2a4f-4244-8530-297eeed068d0
 begin
+	N_CLUSTERS = 3
 	df = select(recommended_df, Not(:uri))
 	data = Matrix(df)
 	dist_matrix = pairwise(Euclidean(), data, data, dims=1)
-	clusters = kmeans(transpose(data), 3)
+	clusters = kmeans(transpose(data), N_CLUSTERS)
 	recommended_df.cluster = clusters.assignments
 end
 
 # ╔═╡ ac35e817-314d-4a98-9cee-32f3361e8920
 begin
-	scatter(data[:, 1], data[:, 2], color=clusters.assignments, legend=false)
-	scatter!(clusters.centers[1, :], clusters.centers[2, :], color=:black, markersize=10, label="Centroides")
+	c = [:blue, :red, :green]
+	scatter(data[:, 1], data[:, 2], palette=c, color=clusters.assignments, legend=false)
 end
-
-# ╔═╡ e37f752b-e523-4355-b687-f1be5f5d1f49
-xt=(1:3)
 
 # ╔═╡ 4aba3555-2d08-44e8-b3cc-7962f5b42b70
 begin
-	c = [:red, :blue, :green]
+	xt = (1:N_CLUSTERS)
 	cluster_counts = combine(groupby(recommended_df, :cluster), nrow)
-	bar(cluster_counts.cluster, cluster_counts.nrow, xlabel="Cluster", ylabel="Número de canciones", label="Counts", legend=:top, color=c, xticks=xt)
+	bar(
+		cluster_counts.cluster,
+		cluster_counts.nrow,
+		xlabel="Cluster",
+		ylabel="Número de canciones",
+		label="Counts",
+		legend=:top,
+		color=c,
+		xticks=xt)
 end
 
 # ╔═╡ d92f7df8-cae8-4a2a-9015-0311326e24a5
@@ -264,7 +258,8 @@ function feature_subplots(features, df)
             size = (800, 1000),
 			group = df.cluster,
 			legend = false,
-			xticks = xt
+			xticks = xt,
+			palette = c
         )
 		
         push!(plots, p)
@@ -285,22 +280,43 @@ end
 # ╔═╡ 24d4ec4d-5beb-49b6-b4d4-133b8e93be7f
 N_SONGS_PER_PLAYLIST = 25
 
-# ╔═╡ 823ed0a0-3229-4ce4-9984-15f7d37d390c
-function shuffle_clusters(recommended_df)
-	val_clusters = [1,2,3]
-	cluster_samples = Dict{Int, Vector{String}}()
+# ╔═╡ 47968f84-696b-4018-b15c-d608b5c2a538
+begin
+	DISTANCE_IDX = 2
 	
-	for val in val_clusters
-	    samples = filter(row -> row.cluster == val, recommended_df)
-	    selected_rows = shuffle(1:nrow(samples))[1:N_SONGS_PER_PLAYLIST]
-	    cluster_samples[val] = samples[selected_rows, :].uri
+	function find_most_similar_rows(df, target_row)
+	    distances = [
+			(index, euclidean(target_row, df[index, :]))
+			for index in 1:size(df, 1)
+		]
+	    return sort(distances, by = x -> x[DISTANCE_IDX])[1:N_SONGS_PER_PLAYLIST,]
 	end
 
-	return cluster_samples
+	function add_similar_songs(df, dict, cluster)
+		dict[cluster] = []
+		cluster_df = filter(row -> row.cluster == cluster, df)
+		centroid = clusters.centers[:, cluster]
+		similar_rows = 
+			find_most_similar_rows(select(cluster_df, Not(:cluster, :uri)), centroid)
+		
+		for (index, distance) in similar_rows
+			push!(dict[cluster], df[index, :].uri)
+		end
+	end
 end
 
-# ╔═╡ 2043ef7d-593d-4434-81b3-5dc1c60bc489
-cluster_samples = shuffle_clusters(recommended_df)
+# ╔═╡ fccc849b-c8b9-4f15-80bc-c97e22ea2b81
+begin
+	songs = Dict{Int, Vector{String}}()
+	songs_threads = [
+		Threads.@spawn add_similar_songs(recommended_df, songs, cluster)
+		for cluster in (1:N_CLUSTERS)
+	]
+
+	for thread in songs_threads
+		wait(thread)
+	end
+end
 
 # ╔═╡ 5006ea0a-c26c-4e9c-a422-cdb54e6415d9
 function create_playlist(name, uris)
@@ -322,9 +338,15 @@ function create_playlist(name, uris)
 end
 
 # ╔═╡ 2dd20f72-cc29-49cb-8ea4-c87b35a06b0c
-for (cluster, tracks) in cluster_samples
-    create_playlist("TDL - Playlist $cluster", tracks)
-    println("Playlist para el Cluster $cluster creada.")
+begin
+	playlists_threads = [
+    	Threads.@spawn create_playlist("TDL - Playlist $cluster", tracks)
+		for (cluster, tracks) in songs
+	]
+
+	for thread in playlists_threads
+		wait(thread)
+	end
 end
 
 # ╔═╡ 00000000-0000-0000-0000-000000000001
@@ -1839,7 +1861,6 @@ version = "1.4.1+1"
 
 # ╔═╡ Cell order:
 # ╠═5adaa470-86b2-4745-a3c1-88510829685f
-# ╠═69c5f944-7778-11ee-1473-eff633c169cb
 # ╟─11b398d9-4453-4e4c-9c26-c4dafddad171
 # ╠═cd5e65f7-2e3a-4b67-8ca9-5952501690db
 # ╠═7076fff5-057d-4b5a-b0bd-d421efcc173a
@@ -1855,9 +1876,7 @@ version = "1.4.1+1"
 # ╠═ba62cb8d-6e1f-417d-bd55-74c6bb35b81f
 # ╠═3d156acc-d820-41d8-ab04-615b07aa53c3
 # ╠═47e503b0-b291-4aaf-a174-11103a200354
-# ╠═02660102-6a75-4076-860a-261a13348ca3
 # ╠═c7446543-7622-4140-9aae-ed37eceef159
-# ╠═f540ec75-abc5-4537-a90e-e6939229b364
 # ╠═5a565a54-ab2c-41d9-931e-1ea835df3b65
 # ╠═e82495d6-7070-4b79-9a9d-301f1fbebd4b
 # ╠═803356ce-9ebc-44c2-b046-a99e1088d662
@@ -1879,16 +1898,14 @@ version = "1.4.1+1"
 # ╠═213d82f2-5ce3-4d60-8e75-d30d98d6233b
 # ╠═f792b205-2a4f-4244-8530-297eeed068d0
 # ╠═ac35e817-314d-4a98-9cee-32f3361e8920
-# ╠═e37f752b-e523-4355-b687-f1be5f5d1f49
 # ╠═4aba3555-2d08-44e8-b3cc-7962f5b42b70
 # ╠═735b89a1-f789-4864-a5b3-72cebc5223ad
 # ╠═d92f7df8-cae8-4a2a-9015-0311326e24a5
 # ╠═9f05197a-61e7-4c6a-878c-59cfaa277b66
-# ╠═33d7bd35-22ab-4fd4-802a-658099588482
 # ╠═91b5bb39-c088-4678-9d92-b7120fd45c70
 # ╠═24d4ec4d-5beb-49b6-b4d4-133b8e93be7f
-# ╠═823ed0a0-3229-4ce4-9984-15f7d37d390c
-# ╠═2043ef7d-593d-4434-81b3-5dc1c60bc489
+# ╠═47968f84-696b-4018-b15c-d608b5c2a538
+# ╠═fccc849b-c8b9-4f15-80bc-c97e22ea2b81
 # ╠═5006ea0a-c26c-4e9c-a422-cdb54e6415d9
 # ╠═2dd20f72-cc29-49cb-8ea4-c87b35a06b0c
 # ╟─00000000-0000-0000-0000-000000000001
