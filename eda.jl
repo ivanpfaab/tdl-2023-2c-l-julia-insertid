@@ -38,6 +38,9 @@ Pkg.add("Distributions")
 # ╔═╡ 6774659c-4017-4834-8c60-8db345f125fe
 Pkg.add("FreqTables")
 
+# ╔═╡ 8b776a2d-23fa-473b-85d0-8f5a763e6831
+Pkg.add("AverageShiftedHistograms")
+
 # ╔═╡ 4197ab47-8622-4ebf-99c1-a350ed6cf7ca
 using CSV
 
@@ -55,9 +58,6 @@ using Distributions
 
 # ╔═╡ 29778b4a-5df5-42e6-8e55-439f48867221
 using FreqTables
-
-# ╔═╡ b5091c02-3abb-4bf9-8635-6b6f581356b0
-using AverageShiftedHistograms
 
 # ╔═╡ 4e1da832-75b9-4e29-be30-83ae2fbd5cdd
 using StatsPlots 
@@ -207,37 +207,10 @@ begin
 	end every 10
 end
 
-# ╔═╡ 9ae56359-e28f-4bc8-ad4f-8993d60947a7
-# ╠═╡ disabled = true
-#=╠═╡
-begin 
-	Pkg.add("AverageShiftedHistograms")
-
-	using AverageShiftedHistograms
-
-	ash(randn(10^6))
-end
-  ╠═╡ =#
-
 # ╔═╡ 435028cc-f443-42e8-a456-4a2b58b36954
 begin
 	o1 = ash(data.danceability)
 	plot(o1)
-end
-
-# ╔═╡ 8c18b32b-2705-4e64-a081-769645f2ea37
-# ╠═╡ disabled = true
-#=╠═╡
-begin
-	o2 = ash(data.energy)
-	plot(o2)
-end
-  ╠═╡ =#
-
-# ╔═╡ 76788a00-5459-4d23-b62e-ff93c0aebb6c
-begin
-	o2 = ash(data.tempo)
-	plot(o2)
 end
 
 # ╔═╡ 7cb098be-6259-42fd-8142-b8264fdc5d04
@@ -277,6 +250,40 @@ end
 Plots.histogram(data_promedio_general_cada_columna_numerica_por_genero[!,"promedio_popularity"], 
                 bins = 50, ylim = (0,15), xlabel = "promedio_popularity", 
                             labels = data_promedio_general_cada_columna_numerica_por_genero[!,"genre"])
+
+# ╔═╡ b5091c02-3abb-4bf9-8635-6b6f581356b0
+#=╠═╡
+using AverageShiftedHistograms
+  ╠═╡ =#
+
+# ╔═╡ 76788a00-5459-4d23-b62e-ff93c0aebb6c
+#=╠═╡
+begin
+	o2 = ash(data.tempo)
+	plot(o2)
+end
+  ╠═╡ =#
+
+# ╔═╡ 8c18b32b-2705-4e64-a081-769645f2ea37
+# ╠═╡ disabled = true
+#=╠═╡
+begin
+	o2 = ash(data.energy)
+	plot(o2)
+end
+  ╠═╡ =#
+
+# ╔═╡ 9ae56359-e28f-4bc8-ad4f-8993d60947a7
+# ╠═╡ disabled = true
+#=╠═╡
+begin 
+	Pkg.add("AverageShiftedHistograms")
+
+	using AverageShiftedHistograms
+
+	ash(randn(10^6))
+end
+  ╠═╡ =#
 
 # ╔═╡ Cell order:
 # ╠═fdc1a8f6-8161-11ee-1711-5f68fb1ab9af
@@ -318,6 +325,7 @@ Plots.histogram(data_promedio_general_cada_columna_numerica_por_genero[!,"promed
 # ╠═c74df312-7620-4c3f-b44e-86428c5d7850
 # ╠═5e95e6c6-5391-4725-a706-325ced198e58
 # ╟─9ae56359-e28f-4bc8-ad4f-8993d60947a7
+# ╠═8b776a2d-23fa-473b-85d0-8f5a763e6831
 # ╠═b5091c02-3abb-4bf9-8635-6b6f581356b0
 # ╠═435028cc-f443-42e8-a456-4a2b58b36954
 # ╠═8c18b32b-2705-4e64-a081-769645f2ea37
