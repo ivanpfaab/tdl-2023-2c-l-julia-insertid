@@ -192,6 +192,163 @@ end
 # ╔═╡ c98cf96e-8555-4ec0-9f23-70dc13470acc
 df_tracks = tracks_features_to_df(tracks_features_dict["audio_features"])
 
+# ╔═╡ 608a4f93-278c-47a7-b45e-97b46c3fc295
+names(df_tracks)
+
+# ╔═╡ 37f86c36-6b32-475f-b191-dd17ac334669
+select!(df_tracks, Not(["analysis_url", "track_href", "type", "id"]))
+
+# ╔═╡ 7aa537cb-455e-4469-873d-2a9e4cddc109
+begin
+	recommended_df = DataFrame()
+	
+	for i in 1:100:length(unique_recommended_tracks)
+	    end_idx = min(i + 100 - 1, length(unique_recommended_tracks))
+	    batch_tracks = unique_recommended_tracks[i:end_idx]
+		features = get_audio_features_multiple_tracks(batch_tracks)
+		new_df = tracks_features_to_df(features["audio_features"])
+		recommended_df = vcat(recommended_df, new_df)
+	end
+end
+
+# ╔═╡ 4395cc1e-b5e7-43e2-a439-0d8baa37dbbf
+select!(recommended_df, Not(["analysis_url", "track_href", "type", "id", "duration_ms"]))
+
+# ╔═╡ f792b205-2a4f-4244-8530-297eeed068d0
+begin
+	N_CLUSTERS = 3
+	df = select(recommended_df, Not(:uri))
+	data = Matrix(df)
+	dist_matrix = pairwise(Euclidean(), data, data, dims=1)
+	clusters = kmeans(transpose(data), N_CLUSTERS)
+	recommended_df.cluster = clusters.assignments
+end
+
+# ╔═╡ ac35e817-314d-4a98-9cee-32f3361e8920
+begin
+	c = [:blue, :red, :green]
+	scatter(data[:, 1], data[:, 2], palette=c, color=clusters.assignments, legend=false)
+end
+
+# ╔═╡ 4aba3555-2d08-44e8-b3cc-7962f5b42b70
+begin
+	xt = (1:N_CLUSTERS)
+	cluster_counts = combine(groupby(recommended_df, :cluster), nrow)
+	bar(
+		cluster_counts.cluster,
+		cluster_counts.nrow,
+		xlabel="Cluster",
+		ylabel="Número de canciones",
+		label="Counts",
+		legend=:top,
+		color=c,
+		xticks=xt)
+end
+
+# ╔═╡ d92f7df8-cae8-4a2a-9015-0311326e24a5
+function feature_subplots(features, df)
+    plots = []
+
+    for f in features
+        p = boxplot(
+            df.cluster,
+            df[!, f],
+            xlabel = f,
+            markersize = 5,
+            size = (800, 1000),
+			group = df.cluster,
+			legend = false,
+			xticks = xt,
+			palette = c
+        )
+		
+        push!(plots, p)
+    end
+
+	rows = length(features) ÷ 2
+    rows += length(features) % 2
+	
+    plot(plots..., layout = (rows, 2))
+end
+
+# ╔═╡ 9f05197a-61e7-4c6a-878c-59cfaa277b66
+begin
+	features = names(recommended_df[:, Not(:cluster, :uri)])
+	feature_subplots(features, recommended_df)
+end
+
+# ╔═╡ 24d4ec4d-5beb-49b6-b4d4-133b8e93be7f
+N_SONGS_PER_PLAYLIST = 25
+
+# ╔═╡ 47968f84-696b-4018-b15c-d608b5c2a538
+begin
+	DISTANCE_IDX = 2
+	
+	function find_most_similar_rows(df, target_row)
+	    distances = [
+			(index, euclidean(target_row, df[index, :]))
+			for index in 1:size(df, 1)
+		]
+	    return sort(distances, by = x -> x[DISTANCE_IDX])[1:N_SONGS_PER_PLAYLIST,]
+	end
+
+	function add_similar_songs(df, dict, cluster)
+		dict[cluster] = []
+		cluster_df = filter(row -> row.cluster == cluster, df)
+		centroid = clusters.centers[:, cluster]
+		similar_rows = 
+			find_most_similar_rows(select(cluster_df, Not(:cluster, :uri)), centroid)
+		
+		for (index, distance) in similar_rows
+			push!(dict[cluster], df[index, :].uri)
+		end
+	end
+end
+
+# ╔═╡ fccc849b-c8b9-4f15-80bc-c97e22ea2b81
+begin
+	songs = Dict{Int, Vector{String}}()
+	songs_threads = [
+		Threads.@spawn add_similar_songs(recommended_df, songs, cluster)
+		for cluster in (1:N_CLUSTERS)
+	]
+
+	for thread in songs_threads
+		wait(thread)
+	end
+end
+
+# ╔═╡ 5006ea0a-c26c-4e9c-a422-cdb54e6415d9
+function create_playlist(name, uris)
+	url = "https://api.spotify.com/v1/me/playlists"
+
+	 playlist_data = Dict(
+        "name" => name,
+        "description" => "Creada usando Julia!"
+    )
+	
+	response = HTTP.request("POST", url, COMMON_REQ_HEADERS, json(playlist_data))
+	if response.status == 201
+		playlist_id = JSON.parse(String(response.body))["id"]
+		add_tracks_url = "https://api.spotify.com/v1/playlists/$playlist_id/tracks"
+		HTTP.request("POST", add_tracks_url, COMMON_REQ_HEADERS, json(Dict("uris" => uris)))
+	else
+		println("Error al crear playlist")
+	end
+end
+
+# ╔═╡ 2dd20f72-cc29-49cb-8ea4-c87b35a06b0c
+begin
+	playlists_threads = [
+    	Threads.@spawn create_playlist("TDL - Playlist $cluster", tracks)
+		for (cluster, tracks) in songs
+	]
+
+	for thread in playlists_threads
+		wait(thread)
+	end
+end
+
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
 [deps]
@@ -1734,5 +1891,22 @@ version = "1.4.1+1"
 # ╠═61952dda-7ec1-4191-912d-3c1c94868add
 # ╠═33138cfb-bae4-4dfd-a010-860b42d0dcbe
 # ╠═c98cf96e-8555-4ec0-9f23-70dc13470acc
+# ╠═608a4f93-278c-47a7-b45e-97b46c3fc295
+# ╠═37f86c36-6b32-475f-b191-dd17ac334669
+# ╠═7aa537cb-455e-4469-873d-2a9e4cddc109
+# ╠═4395cc1e-b5e7-43e2-a439-0d8baa37dbbf
+# ╠═213d82f2-5ce3-4d60-8e75-d30d98d6233b
+# ╠═f792b205-2a4f-4244-8530-297eeed068d0
+# ╠═ac35e817-314d-4a98-9cee-32f3361e8920
+# ╠═4aba3555-2d08-44e8-b3cc-7962f5b42b70
+# ╠═735b89a1-f789-4864-a5b3-72cebc5223ad
+# ╠═d92f7df8-cae8-4a2a-9015-0311326e24a5
+# ╠═9f05197a-61e7-4c6a-878c-59cfaa277b66
+# ╠═91b5bb39-c088-4678-9d92-b7120fd45c70
+# ╠═24d4ec4d-5beb-49b6-b4d4-133b8e93be7f
+# ╠═47968f84-696b-4018-b15c-d608b5c2a538
+# ╠═fccc849b-c8b9-4f15-80bc-c97e22ea2b81
+# ╠═5006ea0a-c26c-4e9c-a422-cdb54e6415d9
+# ╠═2dd20f72-cc29-49cb-8ea4-c87b35a06b0c
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002
