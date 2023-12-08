@@ -15,6 +15,27 @@ begin # Imports
 	using Infinity
 end
 
+# ╔═╡ e3d68fc4-7aa4-4f38-8715-e4f3f369da92
+using MultivariateStats
+
+# ╔═╡ 33e529fc-2452-4f42-8775-a932b6464b5d
+function selectedAtributes()
+	popularidad = 5
+	año = 6
+	bailabilidad = 8
+	energia = 9
+	key = 10
+	loudness = 11
+	speechiness = 13
+	acousticness = 14
+	instrumentalness = 15
+	liveness = 16
+	valence = 17
+	tempo = 18
+	duration = 19
+	return [popularidad, año, bailabilidad ,energia , key, loudness, speechiness, acousticness, instrumentalness, liveness, valence, tempo, duration ]
+end
+
 # ╔═╡ ba8df567-d1ce-4c22-8b58-42d38c259602
 begin # Constantes
 	filePath = "/home/gonza/Descargas/spotify_data.csv"
@@ -22,7 +43,9 @@ begin # Constantes
 	k = 10 # cantidad de clusters
 	M = 1000 # cantidad de canciones del dataset a elegir
 	itr = 15 # iteraciones maximas para k-means
-	kmeans_dimensions = [5, 8]
+	kmeans_dimensions =  [5,8]
+	pca_dimensions = selectedAtributes()
+
 	
 	cantRecomendadas = 20
 end
@@ -32,29 +55,36 @@ function loadCSV(dataset)
 	dataset = DataFrame(load(filePath))
 end
 
-# ╔═╡ 1a6755d5-0b7b-4cc8-802b-2391d0487b7a
-begin
+# ╔═╡ 9b5b2711-fa71-4ec0-b79d-500db4280cf4
+function csvToDf()
 	dataset = DataFrame()
 	df = loadCSV(dataset)
+	return df
 end
 
-# ╔═╡ 5f08a2c8-1790-49c3-a22f-556b7e8a05c1
-begin
-	df2 = df[1:M,[5, 8, 13, 14]]
-	cancionesFavsDF = (df[1100000:1100004, 1:20])
-	cancionesFavsComp = eachrow(df[1100000:1100004, kmeans_dimensions])
+# ╔═╡ 1b4f9b10-9265-4ef7-a500-e536f32ce7d1
+function getRows(df)
+	rows = []
+	
+	for index in range(1 ,length(df[1,:]))
+		push!(rows,df[:, index]  )
+	end
+	return rows'
 end
 
-# ╔═╡ d9b4e0d5-417b-4d3a-b47d-0aa5a4b40a75
-begin
-	f1 = df2[:, 1] # analizar si conviene directo acceder a un segundo DF ya reducido
-	f2 = df2[:, 2] 
-	f3 = df2[:, 3]
-	f4 = df2[:, 4]
-	X = [f1 f2 f3 f4]'
-	X2 = [f1 f2]'
-	println(X2)
+# ╔═╡ 4f50c00c-56b7-4b10-a4dc-503c48663e9f
+begin #carga del Dataframe principal
+	df = csvToDf()
+end
 
+# ╔═╡ 894e95d6-a258-4424-9479-0fdfad19733c
+begin
+	kmeans_data = df[1:M,kmeans_dimensions]
+	cancionesFavsKmeans = eachrow(df[1100000:1100004, kmeans_dimensions])
+	#set kmeans features and rows
+	f1 = kmeans_data[:, 1] 
+	f2 = kmeans_data[:, 2] 
+	KmeansRows = [f1 f2 ]'
 end
 
 # ╔═╡ d52b2fb5-a947-458a-a8f3-95c5cf178f1a
@@ -62,7 +92,7 @@ begin
 	
 Random.seed!(1)
 
-result = kmeans(X2, k; maxiter = itr, display = :iter)
+result = kmeans(KmeansRows, k; maxiter = itr, display = :iter)
 
 a = assignments(result)
 
@@ -78,7 +108,7 @@ function applyPlot()
 
 	# plot results
 
-	p_kmeans_demo = scatter(f1, f2,
+	p_kmeans_demo = Plots.scatter(f1, f2,
 	    xlabel = "Popularidad",
 	    ylabel = "bailabilidad",
 	    title = "k-means Clustering Demo",
@@ -101,14 +131,11 @@ end
 applyPlot()
 
 # ╔═╡ e9e747a0-e618-4fcf-9a16-d1ed5de357c6
-function clusterFav2()
-	# Aca deberiamos calcular la distancia al centro de todos los clusters de cada 
-	# punto, tomando la menor para definir a que cluster perteneceria cada punto
-	# punto --> cancion de favs
+function clusterFav()
 	hits_clusters = zeros(k)
 	centros = result.centers
 	
-	for favSong in cancionesFavsComp
+	for favSong in cancionesFavsKmeans
 		minDistance = ∞
 		closerCluster = 1
 		index = 0
@@ -134,13 +161,11 @@ function clusterFav2()
 		end
 	end
 	
-	println(hits_clusters)
-	println(clusterFav)
 	return clusterFav
 end
 
 # ╔═╡ 6d26b4de-0b15-4328-a293-7e917fbaf243
-clusterFav2()
+clusterFav() # esta linea solo visualiza
 
 # ╔═╡ 63af5cec-575d-4342-9e4b-6d096e486c3d
 function getAllFromCluster(clusterNumber, asignations,kmeans)
@@ -157,9 +182,38 @@ end
 
 # ╔═╡ 9c8b88df-be00-4ddd-a307-d78e1f806148
 begin
-	clusterNumber = clusterFav2()
+	clusterNumber = clusterFav()
 	getAllFromCluster(clusterNumber, a, result)
 end
+
+# ╔═╡ e7cb06a0-d82d-401f-8693-10a0a351a836
+begin
+	pca_data = df[1:M,pca_dimensions]
+	#set PCA features and rows
+	cancionesFavsPCA = (df[1100000:1100004, pca_dimensions])
+
+	pca_input = Matrix(pca_data[:, 1:12])'
+
+end
+
+# ╔═╡ 07326d40-7d56-46a2-8d6a-1b5c6a54cf1e
+function reduceDimensions()
+	model = fit(PCA, pca_input; maxoutdim = 3)
+
+	# transform data
+
+	X_transform = MultivariateStats.transform(model, pca_input)	
+
+	PC1 = X_transform[1, :]
+
+	PC2 = X_transform[2, :]
+
+	PC3 = X_transform[3, :]
+
+end
+
+# ╔═╡ f30368ed-49aa-45b0-8878-605c8aa53b84
+reduceDimensions()
 
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
@@ -169,6 +223,7 @@ Clustering = "aaaa29a8-35af-508c-8bc3-b662a17a0fe5"
 DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
 Distances = "b4f34e82-e78d-54a5-968a-f98e89d6e8f7"
 Infinity = "a303e19e-6eb4-11e9-3b09-cd9505f79100"
+MultivariateStats = "6f286f6a-111f-5878-ab1e-185364afe411"
 Plots = "91a5bcdd-55d7-5caf-9e0b-520d859cae80"
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 
@@ -178,6 +233,7 @@ Clustering = "~0.15.5"
 DataFrames = "~1.6.1"
 Distances = "~0.10.10"
 Infinity = "~0.2.4"
+MultivariateStats = "~0.10.2"
 Plots = "~1.39.0"
 """
 
@@ -187,11 +243,23 @@ PLUTO_MANIFEST_TOML_CONTENTS = """
 
 julia_version = "1.9.3"
 manifest_format = "2.0"
-project_hash = "af8e6a7ffe8a0ac7164e46a8621a91e27d3e2275"
+project_hash = "fdc52c96076a68bdcda08325e8355c89e775ab3d"
 
 [[deps.ArgTools]]
 uuid = "0dad84c5-d112-42e6-8d28-ef12dabb789f"
 version = "1.1.1"
+
+[[deps.Arpack]]
+deps = ["Arpack_jll", "Libdl", "LinearAlgebra", "Logging"]
+git-tree-sha1 = "9b9b347613394885fd1c8c7729bfc60528faa436"
+uuid = "7d9fca2a-8960-54d3-9f78-7d1dccf2cb97"
+version = "0.5.4"
+
+[[deps.Arpack_jll]]
+deps = ["Artifacts", "CompilerSupportLibraries_jll", "JLLWrappers", "Libdl", "OpenBLAS_jll", "Pkg"]
+git-tree-sha1 = "5ba6c757e8feccf03a1554dfaf3e26b3cfc7fd5e"
+uuid = "68821587-b530-5797-8361-c406ea357684"
+version = "3.5.1+1"
 
 [[deps.Artifacts]]
 uuid = "56f22d72-fd6d-98f1-02f0-08ddc0907c33"
@@ -749,6 +817,12 @@ uuid = "a63ad114-7e13-5084-954f-fe012c677804"
 [[deps.MozillaCACerts_jll]]
 uuid = "14a3606d-f60d-562e-9121-12d972cd8159"
 version = "2022.10.11"
+
+[[deps.MultivariateStats]]
+deps = ["Arpack", "LinearAlgebra", "SparseArrays", "Statistics", "StatsAPI", "StatsBase"]
+git-tree-sha1 = "68bf5103e002c44adfd71fea6bd770b3f0586843"
+uuid = "6f286f6a-111f-5878-ab1e-185364afe411"
+version = "0.10.2"
 
 [[deps.NaNMath]]
 deps = ["OpenLibm_jll"]
@@ -1475,17 +1549,23 @@ version = "1.4.1+1"
 
 # ╔═╡ Cell order:
 # ╠═2115576f-5eeb-4181-95ff-db0eac1a88a5
+# ╠═33e529fc-2452-4f42-8775-a932b6464b5d
 # ╠═ba8df567-d1ce-4c22-8b58-42d38c259602
 # ╠═0e4d7aa6-d186-471b-a243-fc6cb90b9a8f
-# ╠═1a6755d5-0b7b-4cc8-802b-2391d0487b7a
-# ╠═5f08a2c8-1790-49c3-a22f-556b7e8a05c1
-# ╠═d9b4e0d5-417b-4d3a-b47d-0aa5a4b40a75
+# ╠═9b5b2711-fa71-4ec0-b79d-500db4280cf4
+# ╟─1b4f9b10-9265-4ef7-a500-e536f32ce7d1
+# ╠═4f50c00c-56b7-4b10-a4dc-503c48663e9f
+# ╠═894e95d6-a258-4424-9479-0fdfad19733c
 # ╠═d52b2fb5-a947-458a-a8f3-95c5cf178f1a
 # ╠═5231504a-2b0a-46ff-9f52-216bb4d03edb
 # ╠═eabf357f-e298-4928-87c1-4ca6e6ec3076
 # ╠═e9e747a0-e618-4fcf-9a16-d1ed5de357c6
 # ╠═6d26b4de-0b15-4328-a293-7e917fbaf243
-# ╠═63af5cec-575d-4342-9e4b-6d096e486c3d
+# ╟─63af5cec-575d-4342-9e4b-6d096e486c3d
 # ╠═9c8b88df-be00-4ddd-a307-d78e1f806148
+# ╠═e3d68fc4-7aa4-4f38-8715-e4f3f369da92
+# ╠═e7cb06a0-d82d-401f-8693-10a0a351a836
+# ╠═07326d40-7d56-46a2-8d6a-1b5c6a54cf1e
+# ╠═f30368ed-49aa-45b0-8878-605c8aa53b84
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002
