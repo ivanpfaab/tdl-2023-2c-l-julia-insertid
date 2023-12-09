@@ -40,7 +40,7 @@ end
 begin # Constantes
 	filePath = "/home/gonza/Descargas/spotify_data.csv"
 
-	k = 10 # cantidad de clusters
+	k = 4 # cantidad de clusters
 	M = 1000 # cantidad de canciones del dataset a elegir
 	itr = 15 # iteraciones maximas para k-means
 	kmeans_dimensions =  [5,8]
@@ -188,12 +188,27 @@ end
 
 # ╔═╡ e7cb06a0-d82d-401f-8693-10a0a351a836
 begin
-	pca_data = df[1:M,pca_dimensions]
+	pca_data = df[1:(M+5),pca_dimensions]
 	#set PCA features and rows
 	cancionesFavsPCA = (df[1100000:1100004, pca_dimensions])
 
 	pca_input = Matrix(pca_data[:, 1:12])'
 
+end
+
+# ╔═╡ 1780bf99-709a-4ff0-9514-7b10a5f18b70
+begin 
+	println(typeof(a))
+	a2 = []
+	for index in range(1, length(a))
+		if a[index] == clusterNumber
+			push!(a2, "Cluster favorito")
+		else
+			push!(a2, "Cluster N"*string(a[index]))
+		end
+	end
+
+	println(a2)
 end
 
 # ╔═╡ 07326d40-7d56-46a2-8d6a-1b5c6a54cf1e
@@ -204,12 +219,19 @@ function reduceDimensions()
 
 	X_transform = MultivariateStats.transform(model, pca_input)	
 
-	PC1 = X_transform[1, :]
+	DF3 = DataFrame()
+	
+	DF3.PC1 = X_transform[1, :]
+	DF3.PC2 = X_transform[2, :]
+	DF3.PC3 = X_transform[3, :]
 
-	PC2 = X_transform[2, :]
-
-	PC3 = X_transform[3, :]
-
+	figura = Plots.plot()
+	Plots.scatter!(DF3.PC1,DF3.PC2,DF3.PC3,group = a2, markersize=7)
+		Plots.scatter!(DF3.PC1[1001:1005],DF3.PC2[1001:1005],DF3.PC3[1001:1005],
+	    color = :yellow,
+	    markersize = 12,
+		label = "Canciones favs",
+	)
 end
 
 # ╔═╡ f30368ed-49aa-45b0-8878-605c8aa53b84
@@ -1565,6 +1587,7 @@ version = "1.4.1+1"
 # ╠═9c8b88df-be00-4ddd-a307-d78e1f806148
 # ╠═e3d68fc4-7aa4-4f38-8715-e4f3f369da92
 # ╠═e7cb06a0-d82d-401f-8693-10a0a351a836
+# ╠═1780bf99-709a-4ff0-9514-7b10a5f18b70
 # ╠═07326d40-7d56-46a2-8d6a-1b5c6a54cf1e
 # ╠═f30368ed-49aa-45b0-8878-605c8aa53b84
 # ╟─00000000-0000-0000-0000-000000000001
