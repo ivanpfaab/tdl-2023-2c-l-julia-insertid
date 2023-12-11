@@ -15,7 +15,9 @@ begin
 end
 
 # ╔═╡ 5adaa470-86b2-4745-a3c1-88510829685f
-begin # dependencias
+begin
+	using CSVFiles
+	using Infinity
 	using Distributions
 	using FreqTables
 	using AverageShiftedHistograms
@@ -29,6 +31,9 @@ begin # dependencias
 	using CSV
 	using Clustering, Plots, Distances, Statistics
 end
+
+# ╔═╡ 3ec2f276-6c39-4614-a8bc-f20ac4d17152
+using MultivariateStats
 
 # ╔═╡ 457cf7cd-fb6b-43f5-8eff-9c5b7ef7cf30
 Markdown.parse("""
@@ -422,8 +427,8 @@ end
 
 # ╔═╡ ac35e817-314d-4a98-9cee-32f3361e8920
 begin
-	c = [:blue, :red, :green]
-	scatter(matrix[:, 1], matrix[:, 2], palette=c, color=clusters.assignments, legend=false)
+	color_palette = [:blue, :red, :green]
+	scatter(matrix[:, 1], matrix[:, 2], palette=color_palette, color=clusters.assignments, legend=false)
 end
 
 # ╔═╡ 4aba3555-2d08-44e8-b3cc-7962f5b42b70
@@ -437,7 +442,7 @@ begin
 		ylabel="Número de canciones",
 		label="Counts",
 		legend=:top,
-		color=c,
+		color=color_palette,
 		xticks=xt)
 end
 
@@ -455,7 +460,7 @@ function feature_subplots(features, df)
 			group = df.cluster,
 			legend = false,
 			xticks = xt,
-			palette = c
+			palette = color_palette
         )
 		
         push!(plots, p)
@@ -545,12 +550,211 @@ begin
 	end
 end
 
+# ╔═╡ cb8fd2ff-85b3-48b9-a823-0f133de03e0c
+function selectedAtributes()
+	popularidad = 5
+	año = 6
+	bailabilidad = 8
+	energia = 9
+	key = 10
+	loudness = 11
+	speechiness = 13
+	acousticness = 14
+	instrumentalness = 15
+	liveness = 16
+	valence = 17
+	tempo = 18
+	duration = 19
+	return [popularidad, año, bailabilidad ,energia , key, loudness, speechiness, acousticness, instrumentalness, liveness, valence, tempo, duration ]
+end
+
+# ╔═╡ 8c83b43a-4463-4f51-8089-24044f8787ed
+begin # Constantes
+	k = 4 # cantidad de clusters
+	M = 1000 # cantidad de canciones del dataset a elegir
+	itr = 15 # iteraciones maximas para k-means
+	kmeans_dimensions =  [5,8]
+	pca_dimensions = selectedAtributes()
+	cantRecomendadas = 20
+end
+
+# ╔═╡ 2e1eea87-9036-445e-8c9c-ef1b445ee9a6
+function getRows(df)
+	rows = []
+	
+	for index in range(1 ,length(df[1,:]))
+		push!(rows,df[:, index]  )
+	end
+	return rows'
+end
+
+# ╔═╡ 37747468-4eb0-455e-b58a-8a29dc594164
+begin
+	kmeans_data = data[1:M,kmeans_dimensions]
+	cancionesFavsKmeans = eachrow(data[1100000:1100004, kmeans_dimensions])
+	#set kmeans features and rows
+	f1 = kmeans_data[:, 1] 
+	f2 = kmeans_data[:, 2] 
+	KmeansRows = [f1 f2 ]'
+end
+
+# ╔═╡ 1b48db61-fe9f-4b06-9f81-ea2c35882574
+begin
+	
+Random.seed!(1)
+
+result = kmeans(KmeansRows, k; maxiter = itr, display = :iter)
+
+a = assignments(result)
+
+c = counts(result)
+
+result = convert(KmeansResult,result)
+
+end
+
+# ╔═╡ 93379b6c-0ba0-4832-bf6e-642b3edcb62a
+function applyPlot()
+	mu = result.centers
+
+	# plot results
+
+	p_kmeans_demo = Plots.scatter(f1, f2,
+	    xlabel = "Popularidad",
+	    ylabel = "bailabilidad",
+	    title = "k-means Clustering Demo",
+	    legend = false,
+	    group = a,
+	    markersize = 10,
+	    alpha = 0.7
+	)
+
+	# plot centroids
+
+	scatter!(mu[1, :], mu[2, :],
+	    color = :yellow,
+	    markersize = 20,
+	    alpha = 0.7
+	)
+end
+
+# ╔═╡ affcbdaf-68d7-45b3-92a1-543d5f16f098
+applyPlot()
+
+# ╔═╡ 998a8a59-c086-4d4a-a582-56631b13feb2
+function clusterFav()
+	hits_clusters = zeros(k)
+	centros = result.centers
+	
+	for favSong in cancionesFavsKmeans
+		minDistance = ∞
+		closerCluster = 1
+		index = 0
+		for centro in eachcol(centros)
+			index += 1
+			distancia = euclidean(favSong, centro)
+			if distancia < minDistance
+				minDistance = distancia
+				closerCluster = index
+			end
+		end
+		hits_clusters[closerCluster] += 1
+	end
+
+	maxHits = 0
+	clusterFav = 1
+	index = 0
+	for hits in hits_clusters
+		index += 1
+		if hits > maxHits 
+			maxHIts = hits
+			clusterFav = index
+		end
+	end
+	
+	return clusterFav
+end
+
+# ╔═╡ ea586964-66a0-4baa-ba09-02bfec61095a
+clusterFav() # esta linea solo visualiza
+
+# ╔═╡ d0da10d6-6853-4fe8-b306-fbe0c35dc5f8
+function getAllFromCluster(clusterNumber, asignations,kmeans)
+	indexes = findall(asignations .== clusterNumber)
+	println(indexes)
+
+	println(length(indexes))
+	if length(indexes) > cantRecomendadas
+		indexes = indexes[1:cantRecomendadas]
+	end
+
+	return data[indexes, 1:20]
+end
+
+# ╔═╡ c6635fd5-1ca7-4b64-8964-2c12649e4d06
+begin
+	clusterNumber = clusterFav()
+	getAllFromCluster(clusterNumber, a, result)
+end
+
+# ╔═╡ c86e08bf-799a-4bb9-ba59-8e39f871eaab
+begin
+	pca_data = data[1:(M+5),pca_dimensions]
+	#set PCA features and rows
+	cancionesFavsPCA = (data[1100000:1100004, pca_dimensions])
+
+	pca_input = Matrix(pca_data[:, 1:12])'
+
+end
+
+# ╔═╡ 4d60ddb4-fdda-4c6b-979e-6100e06290ef
+begin 
+	println(typeof(a))
+	a2 = []
+	for index in range(1, length(a))
+		if a[index] == clusterNumber
+			push!(a2, "Cluster favorito")
+		else
+			push!(a2, "Cluster N"*string(a[index]))
+		end
+	end
+
+	println(a2)
+end
+
+# ╔═╡ 8f001b52-ed11-44cb-ab08-b0d52b9194a8
+function reduceDimensions()
+	model = fit(PCA, pca_input; maxoutdim = 3)
+
+	# transform data
+
+	X_transform = MultivariateStats.transform(model, pca_input)	
+
+	DF3 = DataFrame()
+	
+	DF3.PC1 = X_transform[1, :]
+	DF3.PC2 = X_transform[2, :]
+	DF3.PC3 = X_transform[3, :]
+
+	figura = Plots.plot()
+	Plots.scatter!(DF3.PC1,DF3.PC2,DF3.PC3,group = a2, markersize=7)
+		Plots.scatter!(DF3.PC1[1001:1005],DF3.PC2[1001:1005],DF3.PC3[1001:1005],
+	    color = :yellow,
+	    markersize = 12,
+		label = "Canciones favs",
+	)
+end
+
+# ╔═╡ 538e8397-20d5-40da-a58f-2e1b082e716c
+reduceDimensions()
+
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
 [deps]
 AverageShiftedHistograms = "77b51b56-6f8f-5c3a-9cb4-d71f9594ea6e"
 Base64 = "2a0f44e3-6c83-55bd-87e4-b1978d98bd5f"
 CSV = "336ed68f-0bac-5ca0-87d4-7b16caf5d00b"
+CSVFiles = "5d742f6a-9f54-50ce-8119-2520741973ca"
 Clustering = "aaaa29a8-35af-508c-8bc3-b662a17a0fe5"
 DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
 Distances = "b4f34e82-e78d-54a5-968a-f98e89d6e8f7"
@@ -558,8 +762,10 @@ Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
 DotEnv = "4dc1fcf4-5e3b-5448-94ab-0c38ec0385c1"
 FreqTables = "da1fdf0e-e0ff-5433-a45f-9bb5ff651cb1"
 HTTP = "cd3eb016-35fb-5094-929b-558a96fad6f3"
+Infinity = "a303e19e-6eb4-11e9-3b09-cd9505f79100"
 JSON = "682c06a0-de6a-54ab-a142-c8b1cf79cde6"
 Markdown = "d6f4376e-aef5-505a-96c1-9c027394607a"
+MultivariateStats = "6f286f6a-111f-5878-ab1e-185364afe411"
 Plots = "91a5bcdd-55d7-5caf-9e0b-520d859cae80"
 Pluto = "c3e4b0f8-55cb-11ea-2926-15256bba5781"
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
@@ -570,6 +776,7 @@ StatsPlots = "f3b207a7-027a-5e70-b257-86293d7955fd"
 [compat]
 AverageShiftedHistograms = "~0.8.9"
 CSV = "~0.10.11"
+CSVFiles = "~1.0.2"
 Clustering = "~0.15.5"
 DataFrames = "~1.6.1"
 Distances = "~0.10.11"
@@ -577,7 +784,9 @@ Distributions = "~0.25.104"
 DotEnv = "~0.3.1"
 FreqTables = "~0.4.6"
 HTTP = "~1.10.1"
+Infinity = "~0.2.4"
 JSON = "~0.21.4"
+MultivariateStats = "~0.10.2"
 Plots = "~1.39.0"
 Pluto = "~0.19.35"
 StatsBase = "~0.34.2"
@@ -590,7 +799,7 @@ PLUTO_MANIFEST_TOML_CONTENTS = """
 
 julia_version = "1.9.3"
 manifest_format = "2.0"
-project_hash = "66d2dd2af66de85b319eb06679f2c73ec7acb1ea"
+project_hash = "37dd53c6100101d40bc76b9ac33ff0293e3dcb03"
 
 [[deps.AbstractFFTs]]
 deps = ["LinearAlgebra"]
@@ -663,6 +872,12 @@ deps = ["CodecZlib", "Dates", "FilePathsBase", "InlineStrings", "Mmap", "Parsers
 git-tree-sha1 = "44dbf560808d49041989b8a96cae4cffbeb7966a"
 uuid = "336ed68f-0bac-5ca0-87d4-7b16caf5d00b"
 version = "0.10.11"
+
+[[deps.CSVFiles]]
+deps = ["CodecZlib", "DataValues", "FileIO", "HTTP", "IterableTables", "IteratorInterfaceExtensions", "TableShowUtils", "TableTraits", "TableTraitsUtils", "TextParse"]
+git-tree-sha1 = "2057fc0f258c2d67b31601d1a03319482a6f8b4c"
+uuid = "5d742f6a-9f54-50ce-8119-2520741973ca"
+version = "1.0.2"
 
 [[deps.Cairo_jll]]
 deps = ["Artifacts", "Bzip2_jll", "CompilerSupportLibraries_jll", "Fontconfig_jll", "FreeType2_jll", "Glib_jll", "JLLWrappers", "LZO_jll", "Libdl", "Pixman_jll", "Pkg", "Xorg_libXext_jll", "Xorg_libXrender_jll", "Zlib_jll", "libpng_jll"]
@@ -776,6 +991,20 @@ git-tree-sha1 = "4358750bb58a3caefd5f37a4a0c5bfdbbf075252"
 uuid = "5218b696-f38b-4ac9-8b61-a12ec717816d"
 version = "0.17.6"
 
+[[deps.ConstructionBase]]
+deps = ["LinearAlgebra"]
+git-tree-sha1 = "c53fc348ca4d40d7b371e71fd52251839080cbc9"
+uuid = "187b0558-2788-49d3-abe0-74a17ed4e7c9"
+version = "1.5.4"
+
+    [deps.ConstructionBase.extensions]
+    ConstructionBaseIntervalSetsExt = "IntervalSets"
+    ConstructionBaseStaticArraysExt = "StaticArrays"
+
+    [deps.ConstructionBase.weakdeps]
+    IntervalSets = "8197267c-284f-5f27-9208-e0e47529a953"
+    StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
+
 [[deps.Contour]]
 git-tree-sha1 = "d05d9e7b7aedff4e5b51a029dced05cfb6125781"
 uuid = "d38c429a-6771-53c6-b99e-75d170b6e991"
@@ -807,6 +1036,12 @@ version = "0.18.15"
 git-tree-sha1 = "bfc1187b79289637fa0ef6d4436ebdfe6905cbd6"
 uuid = "e2d170a0-9d28-54be-80f0-106bbe20a464"
 version = "1.0.0"
+
+[[deps.DataValues]]
+deps = ["DataValueInterfaces", "Dates"]
+git-tree-sha1 = "d88a19299eba280a6d062e135a43f00323ae70bf"
+uuid = "e7dc6d0d-1eca-5fa6-8ad6-5aecde8b7ea5"
+version = "0.4.13"
 
 [[deps.Dates]]
 deps = ["Printf"]
@@ -859,6 +1094,12 @@ version = "0.9.3"
 git-tree-sha1 = "d48ae0052378d697f8caf0855c4df2c54a97e580"
 uuid = "4dc1fcf4-5e3b-5448-94ab-0c38ec0385c1"
 version = "0.3.1"
+
+[[deps.DoubleFloats]]
+deps = ["GenericLinearAlgebra", "LinearAlgebra", "Polynomials", "Printf", "Quadmath", "Random", "Requires", "SpecialFunctions"]
+git-tree-sha1 = "5a61c8b62471b2447c62481d4597dbad5e11d363"
+uuid = "497a8b3b-efae-58df-a0af-a86822472b78"
+version = "1.2.6"
 
 [[deps.Downloads]]
 deps = ["ArgTools", "FileWatching", "LibCURL", "NetworkOptions"]
@@ -922,6 +1163,12 @@ deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
 git-tree-sha1 = "c6033cc3892d0ef5bb9cd29b7f2f0331ea5184ea"
 uuid = "f5851436-0d7a-5f13-b9de-f02708fd171a"
 version = "3.3.10+0"
+
+[[deps.FileIO]]
+deps = ["Pkg", "Requires", "UUIDs"]
+git-tree-sha1 = "299dc33549f68299137e51e6d49a13b5b1da9673"
+uuid = "5789e2e9-d7fb-5bc7-8068-2c6fae9b9549"
+version = "1.16.1"
 
 [[deps.FilePathsBase]]
 deps = ["Compat", "Dates", "Mmap", "Printf", "Test", "UUIDs"]
@@ -1008,6 +1255,12 @@ git-tree-sha1 = "025d171a2847f616becc0f84c8dc62fe18f0f6dd"
 uuid = "d2c73de3-f751-5644-a686-071e5b155ba9"
 version = "0.72.10+0"
 
+[[deps.GenericLinearAlgebra]]
+deps = ["LinearAlgebra", "Printf", "Random", "libblastrampoline_jll"]
+git-tree-sha1 = "02be7066f936af6b04669f7c370a31af9036c440"
+uuid = "14197337-ba66-59df-a3e3-ca00e7dcff7a"
+version = "0.3.11"
+
 [[deps.Gettext_jll]]
 deps = ["Artifacts", "CompilerSupportLibraries_jll", "JLLWrappers", "Libdl", "Libiconv_jll", "Pkg", "XML2_jll"]
 git-tree-sha1 = "9b02998aba7bf074d14de89f9d37ca24a1a0b046"
@@ -1055,6 +1308,12 @@ git-tree-sha1 = "7134810b1afce04bbc1045ca1985fbe81ce17653"
 uuid = "ac1192a8-f4b3-4bfe-ba22-af5b92cd3ab2"
 version = "0.9.5"
 
+[[deps.Infinity]]
+deps = ["Dates", "Random", "Requires"]
+git-tree-sha1 = "cf8234411cbeb98676c173f930951ea29dca3b23"
+uuid = "a303e19e-6eb4-11e9-3b09-cd9505f79100"
+version = "0.2.4"
+
 [[deps.InlineStrings]]
 deps = ["Parsers"]
 git-tree-sha1 = "9cc2baf75c6d09f9da536ddf58eb2f29dedaf461"
@@ -1086,6 +1345,12 @@ version = "1.3.0"
 git-tree-sha1 = "630b497eafcc20001bba38a4651b327dcfc491d2"
 uuid = "92d709cd-6900-40b7-9082-c6be49f344b6"
 version = "0.2.2"
+
+[[deps.IterableTables]]
+deps = ["DataValues", "IteratorInterfaceExtensions", "Requires", "TableTraits", "TableTraitsUtils"]
+git-tree-sha1 = "70300b876b2cebde43ebc0df42bc8c94a144e1b4"
+uuid = "1c8ee90f-4401-5389-894e-7a04a3dc0f4d"
+version = "1.0.0"
 
 [[deps.IteratorInterfaceExtensions]]
 git-tree-sha1 = "a3f24677c21f5bbe9d2a714f95dcd58337fb2856"
@@ -1369,6 +1634,11 @@ version = "0.4.13"
 uuid = "ca575930-c2e3-43a9-ace4-1e988b2c1908"
 version = "1.2.0"
 
+[[deps.Nullables]]
+git-tree-sha1 = "8f87854cc8f3685a60689d8edecaa29d2251979b"
+uuid = "4d1e1d77-625e-5b40-9113-a560ec7a8ecd"
+version = "1.0.0"
+
 [[deps.Observables]]
 git-tree-sha1 = "7438a59546cf62428fc9d1bc94729146d37a7225"
 uuid = "510215fc-4207-5dde-b226-833fc4488ee2"
@@ -1496,6 +1766,24 @@ git-tree-sha1 = "8a2903558b1f0550781c5c007aa241d0d1738354"
 uuid = "c3e4b0f8-55cb-11ea-2926-15256bba5781"
 version = "0.19.35"
 
+[[deps.Polynomials]]
+deps = ["LinearAlgebra", "RecipesBase", "Setfield", "SparseArrays"]
+git-tree-sha1 = "a9c7a523d5ed375be3983db190f6a5874ae9286d"
+uuid = "f27b6e38-b328-58d1-80ce-0feddd5e7a45"
+version = "4.0.6"
+
+    [deps.Polynomials.extensions]
+    PolynomialsChainRulesCoreExt = "ChainRulesCore"
+    PolynomialsFFTWExt = "FFTW"
+    PolynomialsMakieCoreExt = "MakieCore"
+    PolynomialsMutableArithmeticsExt = "MutableArithmetics"
+
+    [deps.Polynomials.weakdeps]
+    ChainRulesCore = "d360d2e6-b24c-11e9-a2a3-2a2ae2dbcce4"
+    FFTW = "7a1cc6ca-52ef-59f5-83cd-3a7055c09341"
+    MakieCore = "20f20a25-4f0e-4fdf-b5d1-57303727442b"
+    MutableArithmetics = "d8a4904e-b15c-11e9-3269-09a3773c0cb0"
+
 [[deps.PooledArrays]]
 deps = ["DataAPI", "Future"]
 git-tree-sha1 = "36d8b4b899628fb92c2749eb488d884a926614d3"
@@ -1540,6 +1828,12 @@ deps = ["DataStructures", "LinearAlgebra"]
 git-tree-sha1 = "9ebcd48c498668c7fa0e97a9cae873fbee7bfee1"
 uuid = "1fd47b50-473d-5c70-9696-f719f8f3bcdc"
 version = "2.9.1"
+
+[[deps.Quadmath]]
+deps = ["Compat", "Printf", "Random", "Requires"]
+git-tree-sha1 = "15c8465e3cb37b6bf3abcc0a4c9440799f2ba3fb"
+uuid = "be4d8f0f-7fa4-5f49-b795-2f01399ab2dd"
+version = "0.5.9"
 
 [[deps.REPL]]
 deps = ["InteractiveUtils", "Markdown", "Sockets", "Unicode"]
@@ -1624,6 +1918,12 @@ version = "1.4.1"
 
 [[deps.Serialization]]
 uuid = "9e88b42a-f829-5b0c-bbe9-9e923198166b"
+
+[[deps.Setfield]]
+deps = ["ConstructionBase", "Future", "MacroTools", "StaticArraysCore"]
+git-tree-sha1 = "e2cc6d8c88613c05e1defb55170bf5ff211fbeac"
+uuid = "efcf1570-3423-57d1-acb7-fd33fddbac46"
+version = "1.1.1"
 
 [[deps.SharedArrays]]
 deps = ["Distributed", "Mmap", "Random", "Serialization"]
@@ -1741,11 +2041,23 @@ git-tree-sha1 = "e383c87cf2a1dc41fa30c093b2a19877c83e1bc1"
 uuid = "ab02a1b2-a7df-11e8-156e-fb1833f50b87"
 version = "1.2.0"
 
+[[deps.TableShowUtils]]
+deps = ["DataValues", "Dates", "JSON", "Markdown", "Unicode"]
+git-tree-sha1 = "2a41a3dedda21ed1184a47caab56ed9304e9a038"
+uuid = "5e66a065-1f0a-5976-b372-e0b8c017ca10"
+version = "0.2.6"
+
 [[deps.TableTraits]]
 deps = ["IteratorInterfaceExtensions"]
 git-tree-sha1 = "c06b2f539df1c6efa794486abfb6ed2022561a39"
 uuid = "3783bdb8-4a98-5b6b-af9a-565f29a5fe9c"
 version = "1.0.1"
+
+[[deps.TableTraitsUtils]]
+deps = ["DataValues", "IteratorInterfaceExtensions", "Missings", "TableTraits"]
+git-tree-sha1 = "78fecfe140d7abb480b53a44f3f85b6aa373c293"
+uuid = "382cd787-c1b6-5bf2-a167-d5b971a19bda"
+version = "1.0.2"
 
 [[deps.Tables]]
 deps = ["DataAPI", "DataValueInterfaces", "IteratorInterfaceExtensions", "LinearAlgebra", "OrderedCollections", "TableTraits"]
@@ -1767,6 +2079,12 @@ version = "0.1.1"
 [[deps.Test]]
 deps = ["InteractiveUtils", "Logging", "Random", "Serialization"]
 uuid = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[[deps.TextParse]]
+deps = ["CodecZlib", "DataStructures", "Dates", "DoubleFloats", "Mmap", "Nullables", "WeakRefStrings"]
+git-tree-sha1 = "eb1f4fb185c8644faa2d18d14c72f2c24412415f"
+uuid = "e0df1984-e451-5cb5-8b61-797a481e67e3"
+version = "1.0.2"
 
 [[deps.TranscodingStreams]]
 git-tree-sha1 = "1fbeaaca45801b4ba17c251dd8603ef24801dd84"
@@ -2224,5 +2542,21 @@ version = "1.4.1+1"
 # ╠═fccc849b-c8b9-4f15-80bc-c97e22ea2b81
 # ╠═5006ea0a-c26c-4e9c-a422-cdb54e6415d9
 # ╠═2dd20f72-cc29-49cb-8ea4-c87b35a06b0c
+# ╠═cb8fd2ff-85b3-48b9-a823-0f133de03e0c
+# ╠═8c83b43a-4463-4f51-8089-24044f8787ed
+# ╠═2e1eea87-9036-445e-8c9c-ef1b445ee9a6
+# ╠═37747468-4eb0-455e-b58a-8a29dc594164
+# ╠═1b48db61-fe9f-4b06-9f81-ea2c35882574
+# ╠═93379b6c-0ba0-4832-bf6e-642b3edcb62a
+# ╠═affcbdaf-68d7-45b3-92a1-543d5f16f098
+# ╠═998a8a59-c086-4d4a-a582-56631b13feb2
+# ╠═ea586964-66a0-4baa-ba09-02bfec61095a
+# ╠═d0da10d6-6853-4fe8-b306-fbe0c35dc5f8
+# ╠═c6635fd5-1ca7-4b64-8964-2c12649e4d06
+# ╠═3ec2f276-6c39-4614-a8bc-f20ac4d17152
+# ╠═c86e08bf-799a-4bb9-ba59-8e39f871eaab
+# ╠═4d60ddb4-fdda-4c6b-979e-6100e06290ef
+# ╠═8f001b52-ed11-44cb-ab08-b0d52b9194a8
+# ╠═538e8397-20d5-40da-a58f-2e1b082e716c
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002
