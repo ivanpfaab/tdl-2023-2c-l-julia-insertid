@@ -431,6 +431,12 @@ begin
 	scatter(matrix[:, 1], matrix[:, 2], palette=color_palette, color=clusters.assignments, legend=false)
 end
 
+# ╔═╡ ac62c8c1-254b-4211-a9c2-458b9a57f329
+cluster_freq = countmap(clusters.assignments)
+
+# ╔═╡ 7b33e6f2-4972-4ddf-a958-320323371352
+fav_n_cluster = argmax(cluster_freq)
+
 # ╔═╡ 4aba3555-2d08-44e8-b3cc-7962f5b42b70
 begin
 	xt = (1:N_CLUSTERS)
@@ -2534,6 +2540,8 @@ version = "1.4.1+1"
 # ╠═4395cc1e-b5e7-43e2-a439-0d8baa37dbbf
 # ╠═f792b205-2a4f-4244-8530-297eeed068d0
 # ╠═ac35e817-314d-4a98-9cee-32f3361e8920
+# ╠═ac62c8c1-254b-4211-a9c2-458b9a57f329
+# ╠═7b33e6f2-4972-4ddf-a958-320323371352
 # ╠═4aba3555-2d08-44e8-b3cc-7962f5b42b70
 # ╠═d92f7df8-cae8-4a2a-9015-0311326e24a5
 # ╠═9f05197a-61e7-4c6a-878c-59cfaa277b66
