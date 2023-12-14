@@ -615,10 +615,18 @@ begin
 	end
 end
 
+# ╔═╡ e2c68d9e-b071-4a23-b619-17159e1f266c
+df_tracks_pca = select(df_tracks, Not(:uri))
+
+# ╔═╡ afb51764-6dc7-441b-8118-51276ab9a1fd
+begin
+	# Reordenar columnas de df_tracks para que estén acordes al dataset de 1m songs
+	df_tracks_dimensions = [2, 4, 6, 8, 10, 1, 5, 7, 13, 11, 3, 9]
+	df_tracks_pca_df = (df_tracks_pca[:, df_tracks_dimensions])
+end
+
 # ╔═╡ cb8fd2ff-85b3-48b9-a823-0f133de03e0c
 function selectedAtributes()
-	popularidad = 5
-	año = 6
 	bailabilidad = 8
 	energia = 9
 	key = 10
@@ -630,7 +638,8 @@ function selectedAtributes()
 	valence = 17
 	tempo = 18
 	duration = 19
-	return [popularidad, año, bailabilidad ,energia , key, loudness, speechiness, acousticness, instrumentalness, liveness, valence, tempo, duration ]
+	mode = 12
+	return [bailabilidad ,energia , key, loudness, speechiness, acousticness, instrumentalness, liveness, valence, tempo, duration, mode]
 end
 
 # ╔═╡ 8c83b43a-4463-4f51-8089-24044f8787ed
@@ -2613,6 +2622,8 @@ version = "1.4.1+1"
 # ╠═fccc849b-c8b9-4f15-80bc-c97e22ea2b81
 # ╠═5006ea0a-c26c-4e9c-a422-cdb54e6415d9
 # ╠═2dd20f72-cc29-49cb-8ea4-c87b35a06b0c
+# ╠═e2c68d9e-b071-4a23-b619-17159e1f266c
+# ╠═afb51764-6dc7-441b-8118-51276ab9a1fd
 # ╠═cb8fd2ff-85b3-48b9-a823-0f133de03e0c
 # ╠═8c83b43a-4463-4f51-8089-24044f8787ed
 # ╠═2e1eea87-9036-445e-8c9c-ef1b445ee9a6
