@@ -24,7 +24,7 @@ begin
 	using StatsPlots
 	using Base.Threads
 	using DataFrames
-	using HTTP, JSON, Base64
+	using HTTP, JSON, Base64, Sockets
 	using Pluto
 	using DotEnv
 	using Random, StatsBase
@@ -247,13 +247,11 @@ Markdown.parse("""
 
 # ╔═╡ adb3da2a-e2d2-41f5-8e54-e89c7db9dd86
 begin
-	function get_token_req_body_headers(client_id, client_secret, callback_uri)
+	function get_token_req_body_headers(client_id, client_secret, callback_uri, auth_code)
 		token_request_headers = Dict("Content-Type" => "application/x-www-form-urlencoded")
 		token_request_body = nothing
-
-		auth_code = nothing
+		
 		try
-			auth_code = ENV["AUTH_CODE"]
 			token_request_body = "grant_type=authorization_code&code=$auth_code&redirect_uri=$callback_uri"
 	
 			client_credentials = string(client_id, ":", client_secret)
@@ -280,16 +278,77 @@ begin
 	end
 end
 
+# ╔═╡ 97ba228c-ee5f-4bcf-8ec4-5b5d3390fc8d
+const SCOPES = "user-read-recently-played user-top-read playlist-modify-public"
+
+# ╔═╡ ba5ab88e-cd53-48f3-9658-6113cf980432
+const AUTH_URL = "https://accounts.spotify.com/authorize"
+
+# ╔═╡ efff1b02-fc32-47e9-8700-f44c34275016
+begin
+    captured_code_channel = Channel{Union{Nothing, String}}(1000)
+	
+    function open_auth_url(client_id, callback_uri)
+        url = "$AUTH_URL?client_id=$client_id&redirect_uri=$callback_uri&response_type=code&scope=$SCOPES"
+
+        if Sys.iswindows()
+            run(`start $url`)
+        elseif Sys.isapple()
+            run(`open $url`)
+        elseif Sys.islinux()
+            run(`xdg-open $url`)
+        else
+            println("AUTH URL: $url")
+        end
+    end
+
+    function process_query_params(query_params)
+        if haskey(query_params, "code")
+            put!(captured_code_channel, string(query_params["code"]))
+            return "Authorization successful"
+        else
+			put!(captured_code_channel, "INVALID")
+            return "Authentication failed"
+        end
+    end
+
+    function handle_request(request)
+        path = request.target
+
+        if contains(path, "/callback")
+            body = process_query_params(HTTP.queryparams(request))
+            return HTTP.Response("HTTP/1.1 200 OK\n$body")
+        else
+            return HTTP.Response("HTTP/1.1 404 Not Found\r\n\r\n")
+        end
+    end
+
+    function authenticate(client_id, callback_uri)
+        open_auth_url(client_id, callback_uri)
+
+		server = HTTP.serve!("127.0.0.1", 8888) do request
+			handle_request(request)
+		end
+		
+		code = take!(captured_code_channel)
+        close(server)
+
+        return code
+    end
+end
+
 # ╔═╡ f728f427-c67c-4536-b51a-ebf020609da8
 begin
-	run(`python3 authenticate.py`)
 	DotEnv.load()
+	
 	client_id = ENV["TDL_SPOTIFY_CLIENT_ID"]
 	client_secret = ENV["TDL_SPOTIFY_CLIENT_SECRET"]
 	callback_uri = ENV["TDL_CALLBACK_URI"]
 
+	auth_code = authenticate(client_id, callback_uri)
+
 	token_request_headers, token_request_body =
-		get_token_req_body_headers(client_id, client_secret, callback_uri)
+		get_token_req_body_headers(client_id, client_secret, callback_uri, auth_code)
 
 	token = get_api_token(token_request_headers, token_request_body)
 
@@ -430,6 +489,12 @@ begin
 	color_palette = [:blue, :red, :green]
 	scatter(matrix[:, 1], matrix[:, 2], palette=color_palette, color=clusters.assignments, legend=false)
 end
+
+# ╔═╡ ac62c8c1-254b-4211-a9c2-458b9a57f329
+cluster_freq = countmap(clusters.assignments)
+
+# ╔═╡ 7b33e6f2-4972-4ddf-a958-320323371352
+fav_n_cluster = argmax(cluster_freq)
 
 # ╔═╡ 4aba3555-2d08-44e8-b3cc-7962f5b42b70
 begin
@@ -769,6 +834,7 @@ MultivariateStats = "6f286f6a-111f-5878-ab1e-185364afe411"
 Plots = "91a5bcdd-55d7-5caf-9e0b-520d859cae80"
 Pluto = "c3e4b0f8-55cb-11ea-2926-15256bba5781"
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
+Sockets = "6462fe0b-24de-5631-8697-dd941f90decc"
 Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
 StatsBase = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
 StatsPlots = "f3b207a7-027a-5e70-b257-86293d7955fd"
@@ -799,7 +865,7 @@ PLUTO_MANIFEST_TOML_CONTENTS = """
 
 julia_version = "1.9.3"
 manifest_format = "2.0"
-project_hash = "37dd53c6100101d40bc76b9ac33ff0293e3dcb03"
+project_hash = "46d21205c71c77630d99b143c37732f440dead4f"
 
 [[deps.AbstractFFTs]]
 deps = ["LinearAlgebra"]
@@ -2512,6 +2578,9 @@ version = "1.4.1+1"
 # ╠═241a843e-6fb5-4433-b49a-3a8c26b47d68
 # ╟─11b398d9-4453-4e4c-9c26-c4dafddad171
 # ╠═adb3da2a-e2d2-41f5-8e54-e89c7db9dd86
+# ╠═97ba228c-ee5f-4bcf-8ec4-5b5d3390fc8d
+# ╠═ba5ab88e-cd53-48f3-9658-6113cf980432
+# ╠═efff1b02-fc32-47e9-8700-f44c34275016
 # ╠═f728f427-c67c-4536-b51a-ebf020609da8
 # ╠═3d156acc-d820-41d8-ab04-615b07aa53c3
 # ╠═47e503b0-b291-4aaf-a174-11103a200354
@@ -2534,6 +2603,8 @@ version = "1.4.1+1"
 # ╠═4395cc1e-b5e7-43e2-a439-0d8baa37dbbf
 # ╠═f792b205-2a4f-4244-8530-297eeed068d0
 # ╠═ac35e817-314d-4a98-9cee-32f3361e8920
+# ╠═ac62c8c1-254b-4211-a9c2-458b9a57f329
+# ╠═7b33e6f2-4972-4ddf-a958-320323371352
 # ╠═4aba3555-2d08-44e8-b3cc-7962f5b42b70
 # ╠═d92f7df8-cae8-4a2a-9015-0311326e24a5
 # ╠═9f05197a-61e7-4c6a-878c-59cfaa277b66
