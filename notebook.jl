@@ -645,60 +645,44 @@ end
 # ╔═╡ 8c83b43a-4463-4f51-8089-24044f8787ed
 begin # Constantes
 	k = 4 # cantidad de clusters
-	M = 1000 # cantidad de canciones del dataset a elegir
+	M = 100000 # cantidad de canciones del dataset a elegir
 	itr = 15 # iteraciones maximas para k-means
-	kmeans_dimensions =  [5,8]
-	pca_dimensions = selectedAtributes()
+	selected_atributes = selectedAtributes()
 	cantRecomendadas = 20
 end
 
-# ╔═╡ 2e1eea87-9036-445e-8c9c-ef1b445ee9a6
-function getRows(df)
-	rows = []
-	
-	for index in range(1 ,length(df[1,:]))
-		push!(rows,df[:, index]  )
-	end
-	return rows'
-end
-
-# ╔═╡ 37747468-4eb0-455e-b58a-8a29dc594164
+# ╔═╡ 55fded0f-e9fb-4f33-9019-797d4aa34f32
 begin
-	kmeans_data = data[1:M,kmeans_dimensions]
-	cancionesFavsKmeans = eachrow(data[1100000:1100004, kmeans_dimensions])
+	kmeans_data = data[1:M,[8,11]]
 	#set kmeans features and rows
 	f1 = kmeans_data[:, 1] 
 	f2 = kmeans_data[:, 2] 
 	KmeansRows = [f1 f2 ]'
-end
-
-# ╔═╡ 1b48db61-fe9f-4b06-9f81-ea2c35882574
-begin
 	
-Random.seed!(1)
-
-result = kmeans(KmeansRows, k; maxiter = itr, display = :iter)
-
-a = assignments(result)
-
-c = counts(result)
-
-result = convert(KmeansResult,result)
+	Random.seed!(1)
+	
+	result = kmeans(KmeansRows, k; maxiter = itr, display = :iter)
+	
+	aR2 = assignments(result)
+	
+	cR2 = counts(result)
+	
+	result = convert(KmeansResult,result)
 
 end
 
-# ╔═╡ 93379b6c-0ba0-4832-bf6e-642b3edcb62a
-function applyPlot()
+# ╔═╡ 7c401810-d39d-46a5-86b2-5e372223b392
+function applyPlotR2()
 	mu = result.centers
 
 	# plot results
 
 	p_kmeans_demo = Plots.scatter(f1, f2,
-	    xlabel = "Popularidad",
-	    ylabel = "bailabilidad",
-	    title = "k-means Clustering Demo",
+	    xlabel = "Bailabilidad",
+	    ylabel = "Ruidosidad",
+	    title = "k-means Clustering Bailabilidad/Ruidosidad",
 	    legend = false,
-	    group = a,
+	    group = aR2,
 	    markersize = 10,
 	    alpha = 0.7
 	)
@@ -712,15 +696,51 @@ function applyPlot()
 	)
 end
 
+# ╔═╡ d1c8f3c7-6342-4271-9384-00591d91c8f0
+applyPlotR2()
+
+# ╔═╡ 2e1eea87-9036-445e-8c9c-ef1b445ee9a6
+function getRows(df)
+	rows = []
+	
+	for index in range(1 ,length(df[1,:]))
+		push!(rows,df[:, index]  )
+	end
+	return rows'
+end
+
+# ╔═╡ 37747468-4eb0-455e-b58a-8a29dc594164
+begin
+	kmeans_data_extended = data[1:M,selected_atributes]
+	#cancionesFavsKmeans = eachrow(data[1100000:1100004, kmeans_dimensions])
+	#set kmeans features and rows
+	KmeansRows_extended = Matrix(kmeans_data_extended[:, 1:12])'
+end
+
+# ╔═╡ 1b48db61-fe9f-4b06-9f81-ea2c35882574
+begin
+	
+Random.seed!(1)
+
+result_extended = kmeans(KmeansRows_extended, k; maxiter = itr, display = :iter)
+
+a_extended = assignments(result_extended)
+
+c_extended = counts(result_extended)
+
+result_extended = convert(KmeansResult,result_extended)
+
+end
+
 # ╔═╡ affcbdaf-68d7-45b3-92a1-543d5f16f098
-applyPlot()
+KmeansRows_extended
 
 # ╔═╡ 998a8a59-c086-4d4a-a582-56631b13feb2
 function clusterFav()
 	hits_clusters = zeros(k)
-	centros = result.centers
+	centros = result_extended.centers
 	
-	for favSong in cancionesFavsKmeans
+	for favSong in eachrow(df_tracks_pca_df)
 		minDistance = ∞
 		closerCluster = 1
 		index = 0
@@ -768,32 +788,29 @@ end
 # ╔═╡ c6635fd5-1ca7-4b64-8964-2c12649e4d06
 begin
 	clusterNumber = clusterFav()
-	getAllFromCluster(clusterNumber, a, result)
+	getAllFromCluster(clusterNumber, a_extended, result_extended)
 end
 
 # ╔═╡ c86e08bf-799a-4bb9-ba59-8e39f871eaab
 begin
-	pca_data = data[1:(M+5),pca_dimensions]
+	pca_data = data[1:(M),selected_atributes]
+	println(size(pca_data), size(df_tracks_pca_df))
+	df_combinado = vcat(pca_data, df_tracks_pca_df[1:25, :])
 	#set PCA features and rows
-	cancionesFavsPCA = (data[1100000:1100004, pca_dimensions])
-
-	pca_input = Matrix(pca_data[:, 1:12])'
+	pca_input = Matrix(df_combinado[:, 1:10])'
 
 end
 
 # ╔═╡ 4d60ddb4-fdda-4c6b-979e-6100e06290ef
 begin 
-	println(typeof(a))
 	a2 = []
-	for index in range(1, length(a))
-		if a[index] == clusterNumber
+	for index in range(1, length(a_extended))
+		if a_extended[index] == clusterNumber
 			push!(a2, "Cluster favorito")
 		else
-			push!(a2, "Cluster N"*string(a[index]))
+			push!(a2, "Cluster N"*string(a_extended[index]))
 		end
 	end
-
-	println(a2)
 end
 
 # ╔═╡ 8f001b52-ed11-44cb-ab08-b0d52b9194a8
@@ -812,9 +829,10 @@ function reduceDimensions()
 
 	figura = Plots.plot()
 	Plots.scatter!(DF3.PC1,DF3.PC2,DF3.PC3,group = a2, markersize=7)
-		Plots.scatter!(DF3.PC1[1001:1005],DF3.PC2[1001:1005],DF3.PC3[1001:1005],
+
+	Plots.scatter!(DF3.PC1[M:M+25],DF3.PC2[M:M+25],DF3.PC3[M:M+25],
 	    color = :yellow,
-	    markersize = 12,
+	    markersize = 10,
 		label = "Canciones favs",
 	)
 end
@@ -2624,12 +2642,14 @@ version = "1.4.1+1"
 # ╠═2dd20f72-cc29-49cb-8ea4-c87b35a06b0c
 # ╠═e2c68d9e-b071-4a23-b619-17159e1f266c
 # ╠═afb51764-6dc7-441b-8118-51276ab9a1fd
-# ╠═cb8fd2ff-85b3-48b9-a823-0f133de03e0c
 # ╠═8c83b43a-4463-4f51-8089-24044f8787ed
+# ╠═cb8fd2ff-85b3-48b9-a823-0f133de03e0c
+# ╠═55fded0f-e9fb-4f33-9019-797d4aa34f32
+# ╠═7c401810-d39d-46a5-86b2-5e372223b392
+# ╠═d1c8f3c7-6342-4271-9384-00591d91c8f0
 # ╠═2e1eea87-9036-445e-8c9c-ef1b445ee9a6
 # ╠═37747468-4eb0-455e-b58a-8a29dc594164
 # ╠═1b48db61-fe9f-4b06-9f81-ea2c35882574
-# ╠═93379b6c-0ba0-4832-bf6e-642b3edcb62a
 # ╠═affcbdaf-68d7-45b3-92a1-543d5f16f098
 # ╠═998a8a59-c086-4d4a-a582-56631b13feb2
 # ╠═ea586964-66a0-4baa-ba09-02bfec61095a
