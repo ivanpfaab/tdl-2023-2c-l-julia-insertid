@@ -245,6 +245,9 @@ Markdown.parse("""
 """
 )
 
+# ╔═╡ 2b7e4ef7-c583-4eb9-b426-954b17fcbea5
+data
+
 # ╔═╡ adb3da2a-e2d2-41f5-8e54-e89c7db9dd86
 begin
 	function get_token_req_body_headers(client_id, client_secret, callback_uri, auth_code)
@@ -286,10 +289,10 @@ const AUTH_URL = "https://accounts.spotify.com/authorize"
 
 # ╔═╡ efff1b02-fc32-47e9-8700-f44c34275016
 begin
-    captured_code_channel = Channel{Union{Nothing, String}}(1000)
+    captured_code_channel = Channel{String}(1)
 	
     function open_auth_url(client_id, callback_uri)
-        url = "$AUTH_URL?client_id=$client_id&redirect_uri=$callback_uri&response_type=code&scope=$SCOPES"
+        url = "$AUTH_URL?client_id=$client_id&redirect_uri=$callback_uri&response_type=code&scope=$SCOPES&show_dialog=true"
 
         if Sys.iswindows()
             run(`start $url`)
@@ -339,7 +342,7 @@ end
 
 # ╔═╡ f728f427-c67c-4536-b51a-ebf020609da8
 begin
-	DotEnv.load()
+	DotEnv.load() # .env
 	
 	client_id = ENV["TDL_SPOTIFY_CLIENT_ID"]
 	client_secret = ENV["TDL_SPOTIFY_CLIENT_SECRET"]
@@ -372,69 +375,38 @@ function api_http_get_request(endpoint)
 	end
 end
 
-# ╔═╡ 47e503b0-b291-4aaf-a174-11103a200354
-function get_track_info(track_id)
-	return api_http_get_request("tracks/$track_id")
+# ╔═╡ 803356ce-9ebc-44c2-b046-a99e1088d662
+function encode_ids(ids)
+	return join(map(x -> replace(x, "/" => "%2F", "+" => "%2B", " " => "%20"), ids), ",")
 end
 
-# ╔═╡ c7446543-7622-4140-9aae-ed37eceef159
-function get_track_audio_features(track_id)
-    return api_http_get_request("audio-features/$track_id")
-end
+# ╔═╡ e03f31f2-6795-46fb-be16-745bb8ce0bee
+begin
+	function get_track_info(track_id)
+		return api_http_get_request("tracks/$track_id")
+	end
 
-# ╔═╡ 5a565a54-ab2c-41d9-931e-1ea835df3b65
-function get_favorite_tracks()
-	return api_http_get_request("me/top/tracks?limit=50")
+	function get_track_audio_features(track_id)
+    	return api_http_get_request("audio-features/$track_id")
+	end
+
+	function get_favorite_tracks()
+		return api_http_get_request("me/top/tracks?limit=50")
+	end
+
+	function get_audio_features_multiple_tracks(ids)
+		return api_http_get_request("audio-features?ids=$(encode_ids(ids))")
+	end
+
+	function get_recommendations(ids)
+		return api_http_get_request("recommendations?seed_tracks=$(encode_ids(ids))&limit=100")["tracks"]
+	end
 end
 
 # ╔═╡ e82495d6-7070-4b79-9a9d-301f1fbebd4b
 begin
 	favorite_tracks = get_favorite_tracks()
 	favorite_tracks_ids = [item["id"] for item in favorite_tracks["items"]]
-end
-
-# ╔═╡ 803356ce-9ebc-44c2-b046-a99e1088d662
-function encode_ids(ids)
-	return join(map(x -> replace(x, "/" => "%2F", "+" => "%2B", " " => "%20"), ids), ",")
-end
-
-# ╔═╡ 66f01f4b-7c04-4e5f-adcb-c5514fa0ef05
-function get_recommendations(ids)
-	return api_http_get_request("recommendations?seed_tracks=$(encode_ids(ids))&limit=100")["tracks"]
-end
-
-# ╔═╡ 80212680-af5f-464d-9f28-8e3c526cfce1
-begin
-	function process_batch(batch_ids)
-	    return [track["id"] for track in get_recommendations(batch_ids)]
-	end
-	
-	BATCH_SIZE = 5
-	batches = [favorite_tracks_ids[i:min(i+BATCH_SIZE-1, end)] for i in 1:BATCH_SIZE:length(favorite_tracks_ids)]
-	
-	recommended_tracks = [Threads.@spawn process_batch(batch) for batch in batches]
-	recommended_tracks = vcat(fetch.(recommended_tracks)...)
-end
-
-# ╔═╡ c5ec84dd-06ac-433f-8e55-72932891bcbe
-recommended_tracks
-
-# ╔═╡ ec787a8f-9821-49ba-bae3-3f37c958bb71
-unique_recommended_tracks = collect(Set(recommended_tracks))
-
-# ╔═╡ 5e883871-e5b4-41dd-bd0c-3b1299ff62df
-begin
-	len_recommended_tracks = length(recommended_tracks)
-	len_unique_recommended_tracks = length(unique_recommended_tracks)
-
-	n_filtered = len_recommended_tracks - len_unique_recommended_tracks
-	
-	println("Se filtraron $n_filtered de $len_recommended_tracks canciones. $len_unique_recommended_tracks canciones únicas")
-end
-
-# ╔═╡ d67f578e-4ead-42e8-97c5-9c61a0b0fc2f
-function get_audio_features_multiple_tracks(ids)
-	return api_http_get_request("audio-features?ids=$(encode_ids(ids))")
 end
 
 # ╔═╡ ac3fcb59-990a-4128-ba5a-760b89fb3742
@@ -458,131 +430,49 @@ names(df_tracks)
 # ╔═╡ 37f86c36-6b32-475f-b191-dd17ac334669
 select!(df_tracks, Not(["analysis_url", "track_href", "type", "id"]))
 
-# ╔═╡ 7aa537cb-455e-4469-873d-2a9e4cddc109
+# ╔═╡ 762b8f67-bd3a-49db-ae42-29f481115dc6
+df_tracks
+
+# ╔═╡ 80212680-af5f-464d-9f28-8e3c526cfce1
 begin
-	recommended_df = DataFrame()
+	function process_batch(batch_ids)
+	    return [track["id"] for track in get_recommendations(batch_ids)]
+	end
 	
-	for i in 1:100:length(unique_recommended_tracks)
-	    end_idx = min(i + 100 - 1, length(unique_recommended_tracks))
-	    batch_tracks = unique_recommended_tracks[i:end_idx]
-		features = get_audio_features_multiple_tracks(batch_tracks)
-		new_df = tracks_features_to_df(features["audio_features"])
-		recommended_df = vcat(recommended_df, new_df)
-	end
-end
-
-# ╔═╡ 4395cc1e-b5e7-43e2-a439-0d8baa37dbbf
-select!(recommended_df, Not(["analysis_url", "track_href", "type", "id", "duration_ms"]))
-
-# ╔═╡ f792b205-2a4f-4244-8530-297eeed068d0
-begin
-	N_CLUSTERS = 3
-	df = select(recommended_df, Not(:uri))
-	matrix = Matrix(df)
-	dist_matrix = pairwise(Euclidean(), matrix, matrix, dims=1)
-	clusters = kmeans(transpose(matrix), N_CLUSTERS)
-	recommended_df.cluster = clusters.assignments
-end
-
-# ╔═╡ ac35e817-314d-4a98-9cee-32f3361e8920
-begin
-	color_palette = [:blue, :red, :green]
-	scatter(matrix[:, 1], matrix[:, 2], palette=color_palette, color=clusters.assignments, legend=false)
-end
-
-# ╔═╡ ac62c8c1-254b-4211-a9c2-458b9a57f329
-cluster_freq = countmap(clusters.assignments)
-
-# ╔═╡ 7b33e6f2-4972-4ddf-a958-320323371352
-fav_n_cluster = argmax(cluster_freq)
-
-# ╔═╡ 4aba3555-2d08-44e8-b3cc-7962f5b42b70
-begin
-	xt = (1:N_CLUSTERS)
-	cluster_counts = combine(groupby(recommended_df, :cluster), nrow)
-	bar(
-		cluster_counts.cluster,
-		cluster_counts.nrow,
-		xlabel="Cluster",
-		ylabel="Número de canciones",
-		label="Counts",
-		legend=:top,
-		color=color_palette,
-		xticks=xt)
-end
-
-# ╔═╡ d92f7df8-cae8-4a2a-9015-0311326e24a5
-function feature_subplots(features, df)
-    plots = []
-
-    for f in features
-        p = boxplot(
-            df.cluster,
-            df[!, f],
-            xlabel = f,
-            markersize = 5,
-            size = (800, 1000),
-			group = df.cluster,
-			legend = false,
-			xticks = xt,
-			palette = color_palette
-        )
-		
-        push!(plots, p)
-    end
-
-	rows = length(features) ÷ 2
-    rows += length(features) % 2
+	BATCH_SIZE = 5
+	batches = [favorite_tracks_ids[i:min(i+BATCH_SIZE-1, end)] for i in 1:BATCH_SIZE:length(favorite_tracks_ids)]
 	
-    plot(plots..., layout = (rows, 2))
+	# recommended_ids = [process_batch(batch) for batch in batches]
+	# recommended_tracks = vcat(recommended_ids...)
+
+	recommended_threads = [@spawn process_batch(batch) for batch in batches]
+	recommended_tracks = vcat(fetch.(recommended_threads)...)
 end
 
-# ╔═╡ 9f05197a-61e7-4c6a-878c-59cfaa277b66
-begin
-	features = names(recommended_df[:, Not(:cluster, :uri)])
-	feature_subplots(features, recommended_df)
-end
+# ╔═╡ c5ec84dd-06ac-433f-8e55-72932891bcbe
+recommended_tracks
 
-# ╔═╡ 24d4ec4d-5beb-49b6-b4d4-133b8e93be7f
-N_SONGS_PER_PLAYLIST = 25
+# ╔═╡ ec787a8f-9821-49ba-bae3-3f37c958bb71
+unique_recommended_tracks = collect(Set(recommended_tracks))
 
-# ╔═╡ 47968f84-696b-4018-b15c-d608b5c2a538
+# ╔═╡ 5e883871-e5b4-41dd-bd0c-3b1299ff62df
 begin
-	DISTANCE_IDX = 2
+	len_recommended_tracks = length(recommended_tracks)
+	len_unique_recommended_tracks = length(unique_recommended_tracks)
+
+	n_filtered = len_recommended_tracks - len_unique_recommended_tracks
 	
-	function find_most_similar_rows(df, target_row)
-	    distances = [
-			(index, euclidean(target_row, df[index, :]))
-			for index in 1:size(df, 1)
-		]
-	    return sort(distances, by = x -> x[DISTANCE_IDX])[1:N_SONGS_PER_PLAYLIST,]
-	end
-
-	function add_similar_songs(df, dict, cluster)
-		dict[cluster] = []
-		cluster_df = filter(row -> row.cluster == cluster, df)
-		centroid = clusters.centers[:, cluster]
-		similar_rows = 
-			find_most_similar_rows(select(cluster_df, Not(:cluster, :uri)), centroid)
-		
-		for (index, distance) in similar_rows
-			push!(dict[cluster], df[index, :].uri)
-		end
-	end
+	println("Se filtraron $n_filtered de $len_recommended_tracks canciones. $len_unique_recommended_tracks canciones únicas")
 end
 
-# ╔═╡ fccc849b-c8b9-4f15-80bc-c97e22ea2b81
-begin
-	songs = Dict{Int, Vector{String}}()
-	songs_threads = [
-		Threads.@spawn add_similar_songs(recommended_df, songs, cluster)
-		for cluster in (1:N_CLUSTERS)
-	]
+# ╔═╡ e0b4360c-e534-4617-9c0e-03f6c2d5b384
+sample_idxs = sample(1:len_unique_recommended_tracks, 25, replace=false)
 
-	for thread in songs_threads
-		wait(thread)
-	end
-end
+# ╔═╡ c1a4344c-1b9d-46fb-aa89-2979e8ee294a
+tracks = unique_recommended_tracks[sample_idxs]
+
+# ╔═╡ ab76d1cb-0f88-45e3-9006-5b540a78e8d9
+tracks_uris = ["spotify:track:$t" for t in tracks]
 
 # ╔═╡ 5006ea0a-c26c-4e9c-a422-cdb54e6415d9
 function create_playlist(name, uris)
@@ -593,7 +483,7 @@ function create_playlist(name, uris)
         "description" => "Creada usando Julia!"
     )
 	
-	response = HTTP.request("POST", url, COMMON_REQ_HEADERS, json(playlist_data))
+	response = HTTP.post(url, COMMON_REQ_HEADERS, json(playlist_data))
 	if response.status == 201
 		playlist_id = JSON.parse(String(response.body))["id"]
 		add_tracks_url = "https://api.spotify.com/v1/playlists/$playlist_id/tracks"
@@ -604,16 +494,7 @@ function create_playlist(name, uris)
 end
 
 # ╔═╡ 2dd20f72-cc29-49cb-8ea4-c87b35a06b0c
-begin
-	playlists_threads = [
-    	Threads.@spawn create_playlist("TDL - Playlist $cluster", tracks)
-		for (cluster, tracks) in songs
-	]
-
-	for thread in playlists_threads
-		wait(thread)
-	end
-end
+create_playlist("TDL - Playlist", tracks_uris)
 
 # ╔═╡ e2c68d9e-b071-4a23-b619-17159e1f266c
 df_tracks_pca = select(df_tracks, Not(:uri))
@@ -2604,41 +2485,30 @@ version = "1.4.1+1"
 # ╠═5ff846d3-6e92-4eba-9e10-27869fe831ee
 # ╠═241a843e-6fb5-4433-b49a-3a8c26b47d68
 # ╟─11b398d9-4453-4e4c-9c26-c4dafddad171
-# ╠═adb3da2a-e2d2-41f5-8e54-e89c7db9dd86
+# ╠═2b7e4ef7-c583-4eb9-b426-954b17fcbea5
+# ╟─adb3da2a-e2d2-41f5-8e54-e89c7db9dd86
 # ╠═97ba228c-ee5f-4bcf-8ec4-5b5d3390fc8d
 # ╠═ba5ab88e-cd53-48f3-9658-6113cf980432
 # ╠═efff1b02-fc32-47e9-8700-f44c34275016
 # ╠═f728f427-c67c-4536-b51a-ebf020609da8
 # ╠═3d156acc-d820-41d8-ab04-615b07aa53c3
-# ╠═47e503b0-b291-4aaf-a174-11103a200354
-# ╠═c7446543-7622-4140-9aae-ed37eceef159
-# ╠═5a565a54-ab2c-41d9-931e-1ea835df3b65
+# ╠═e03f31f2-6795-46fb-be16-745bb8ce0bee
 # ╠═e82495d6-7070-4b79-9a9d-301f1fbebd4b
 # ╠═803356ce-9ebc-44c2-b046-a99e1088d662
-# ╠═66f01f4b-7c04-4e5f-adcb-c5514fa0ef05
-# ╠═80212680-af5f-464d-9f28-8e3c526cfce1
-# ╠═c5ec84dd-06ac-433f-8e55-72932891bcbe
-# ╠═ec787a8f-9821-49ba-bae3-3f37c958bb71
-# ╠═5e883871-e5b4-41dd-bd0c-3b1299ff62df
-# ╠═d67f578e-4ead-42e8-97c5-9c61a0b0fc2f
 # ╠═ac3fcb59-990a-4128-ba5a-760b89fb3742
 # ╠═33138cfb-bae4-4dfd-a010-860b42d0dcbe
 # ╠═c98cf96e-8555-4ec0-9f23-70dc13470acc
 # ╠═608a4f93-278c-47a7-b45e-97b46c3fc295
 # ╠═37f86c36-6b32-475f-b191-dd17ac334669
-# ╠═7aa537cb-455e-4469-873d-2a9e4cddc109
-# ╠═4395cc1e-b5e7-43e2-a439-0d8baa37dbbf
-# ╠═f792b205-2a4f-4244-8530-297eeed068d0
-# ╠═ac35e817-314d-4a98-9cee-32f3361e8920
-# ╠═ac62c8c1-254b-4211-a9c2-458b9a57f329
-# ╠═7b33e6f2-4972-4ddf-a958-320323371352
-# ╠═4aba3555-2d08-44e8-b3cc-7962f5b42b70
-# ╠═d92f7df8-cae8-4a2a-9015-0311326e24a5
-# ╠═9f05197a-61e7-4c6a-878c-59cfaa277b66
-# ╠═24d4ec4d-5beb-49b6-b4d4-133b8e93be7f
-# ╠═47968f84-696b-4018-b15c-d608b5c2a538
-# ╠═fccc849b-c8b9-4f15-80bc-c97e22ea2b81
-# ╠═5006ea0a-c26c-4e9c-a422-cdb54e6415d9
+# ╠═762b8f67-bd3a-49db-ae42-29f481115dc6
+# ╠═80212680-af5f-464d-9f28-8e3c526cfce1
+# ╠═c5ec84dd-06ac-433f-8e55-72932891bcbe
+# ╠═ec787a8f-9821-49ba-bae3-3f37c958bb71
+# ╠═5e883871-e5b4-41dd-bd0c-3b1299ff62df
+# ╠═e0b4360c-e534-4617-9c0e-03f6c2d5b384
+# ╠═c1a4344c-1b9d-46fb-aa89-2979e8ee294a
+# ╠═ab76d1cb-0f88-45e3-9006-5b540a78e8d9
+# ╟─5006ea0a-c26c-4e9c-a422-cdb54e6415d9
 # ╠═2dd20f72-cc29-49cb-8ea4-c87b35a06b0c
 # ╠═e2c68d9e-b071-4a23-b619-17159e1f266c
 # ╠═afb51764-6dc7-441b-8118-51276ab9a1fd
