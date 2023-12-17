@@ -24,3 +24,10 @@ using Pluto
 Pluto.run()
 ```
 
+
+### Correr la notebook Pluto
+
+Links de interes:
+
+Playlist clustering & machine learning:
+https://youtube.com/playlist?list=PLhQ2JMBcfAsi76O13sJzk4LXA_mu5sd9E&si=hbJolu0wrEGaD6Dv
